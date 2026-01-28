@@ -4,14 +4,18 @@ declare(strict_types=1);
 date_default_timezone_set('Europe/Berlin');
 
 $csv_path = __DIR__ . '/private/visitors.csv';
-$access_token_path = __DIR__ . '/private/.access_token';
+$access_tokens_path = __DIR__ . '/private/access_tokens.json';
+$legacy_access_token_path = __DIR__ . '/private/.access_token';
 $admin_token_path = __DIR__ . '/private/.admin_token';
 $archive_dir = __DIR__ . '/archives';
 $settings_path = __DIR__ . '/private/settings.json';
 $event_name_path = __DIR__ . '/private/.event_name';
 $log_path = __DIR__ . '/private/request.log';
+$categories_path = __DIR__ . '/private/menu_categories.json';
+$items_path = __DIR__ . '/private/menu_items.json';
 require_once __DIR__ . '/private/bootstrap.php';
 require_once __DIR__ . '/private/auth.php';
+require_once __DIR__ . '/private/menu_lib.php';
 
 
 /**
@@ -30,6 +34,24 @@ function send_json_error(int $code, string $message): void
     exit;
 }
 
+/**
+ * Require same-origin POST requests for public reads.
+ */
+function require_menu_read(): void
+{
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        send_json_error(405, 'Method not allowed');
+    }
+    if (!is_same_origin()) {
+        send_json_error(403, 'Forbidden');
+    }
+    $requested_with = $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '';
+    if ($requested_with !== 'fetch') {
+        send_json_error(403, 'Forbidden');
+    }
+}
+
+menu_ensure_seed($categories_path, $items_path);
 
 $admin_token = load_token('KEKCOUNTER_ADMIN_TOKEN', $admin_token_path);
 $action = $_GET['action'] ?? null;
@@ -79,11 +101,32 @@ if ($action !== null) {
     if ($action === 'set_access_token') {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
-        $token = trim((string)($payload['token'] ?? ($_POST['token'] ?? '')));
+        $token = normalize_access_token_value((string)($payload['token'] ?? ($_POST['token'] ?? '')), 160);
         if ($token === '') {
             send_json_error(400, 'Token missing');
         }
-        file_put_contents($access_token_path, $token, LOCK_EX);
+        $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
+        $updated = false;
+        foreach ($tokens as $index => $entry) {
+            if (($entry['id'] ?? '') === 'default') {
+                $tokens[$index]['name'] = 'Default';
+                $tokens[$index]['token'] = $token;
+                $tokens[$index]['active'] = true;
+                $updated = true;
+                break;
+            }
+        }
+        if (!$updated) {
+            $tokens[] = [
+                'id' => 'default',
+                'name' => 'Default',
+                'token' => $token,
+                'active' => true,
+            ];
+        }
+        if (!save_access_tokens($access_tokens_path, $tokens)) {
+            send_json_error(500, 'Save failed');
+        }
         log_event($log_path, 'admin:set_access_token', 200);
         echo json_encode(['ok' => true]);
         exit;
@@ -115,6 +158,91 @@ if ($action !== null) {
         $saved = save_event_name($event_name_path, $name);
         log_event($log_path, 'admin:set_event_name', 200, ['name' => $saved]);
         echo json_encode(['ok' => true, 'eventName' => $saved]);
+        exit;
+    }
+
+    if ($action === 'get_menu') {
+        header('Content-Type: application/json; charset=utf-8');
+        require_menu_read();
+        echo json_encode(menu_get_menu($categories_path, $items_path));
+        exit;
+    }
+
+    if ($action === 'add_category') {
+        header('Content-Type: application/json; charset=utf-8');
+        $payload = read_json_body();
+        $result = menu_add_category(
+            $categories_path,
+            $items_path,
+            (string)($payload['name'] ?? ''),
+            (bool)($payload['active'] ?? false)
+        );
+        if (!$result['ok']) {
+            send_json_error(400, $result['error'] ?? 'Save failed');
+        }
+        $menu = menu_get_menu($categories_path, $items_path);
+        echo json_encode(['ok' => true, 'category' => $result['category'] ?? [], 'menu' => $menu]);
+        exit;
+    }
+
+    if ($action === 'add_item') {
+        header('Content-Type: application/json; charset=utf-8');
+        $payload = read_json_body();
+        $result = menu_add_item(
+            $categories_path,
+            $items_path,
+            (string)($payload['categoryId'] ?? ''),
+            (string)($payload['name'] ?? ''),
+            (string)($payload['price'] ?? '0'),
+            $payload['ingredients'] ?? '',
+            $payload['tags'] ?? '',
+            (string)($payload['preparation'] ?? ''),
+            (bool)($payload['active'] ?? false)
+        );
+        if (!$result['ok']) {
+            send_json_error(400, $result['error'] ?? 'Save failed');
+        }
+        $menu = menu_get_menu($categories_path, $items_path);
+        echo json_encode(['ok' => true, 'item' => $result['item'] ?? [], 'menu' => $menu]);
+        exit;
+    }
+
+    if ($action === 'update_category') {
+        header('Content-Type: application/json; charset=utf-8');
+        $payload = read_json_body();
+        $result = menu_update_category(
+            $categories_path,
+            $items_path,
+            (string)($payload['id'] ?? ''),
+            (string)($payload['name'] ?? ''),
+            (bool)($payload['active'] ?? false)
+        );
+        if (!$result['ok']) {
+            send_json_error(400, $result['error'] ?? 'Save failed');
+        }
+        $menu = menu_get_menu($categories_path, $items_path);
+        echo json_encode(['ok' => true, 'menu' => $menu]);
+        exit;
+    }
+
+    if ($action === 'update_item') {
+        header('Content-Type: application/json; charset=utf-8');
+        $payload = read_json_body();
+        $result = menu_update_item(
+            $items_path,
+            (string)($payload['id'] ?? ''),
+            (string)($payload['name'] ?? ''),
+            (string)($payload['price'] ?? '0'),
+            $payload['ingredients'] ?? '',
+            $payload['tags'] ?? '',
+            (string)($payload['preparation'] ?? ''),
+            (bool)($payload['active'] ?? false)
+        );
+        if (!$result['ok']) {
+            send_json_error(400, $result['error'] ?? 'Save failed');
+        }
+        $menu = menu_get_menu($categories_path, $items_path);
+        echo json_encode(['ok' => true, 'menu' => $menu]);
         exit;
     }
 
@@ -319,6 +447,40 @@ $header = <<<HTML
 </header>
 HTML;
 
+$modals = <<<HTML
+<div class="modal fade" id="menuErrorModal" tabindex="-1" aria-labelledby="menuErrorTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5" id="menuErrorTitle">Fehler</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schliessen"></button>
+      </div>
+      <div class="modal-body">
+        <p id="menuErrorMessage" class="mb-0">Ein Fehler ist aufgetreten.</p>
+      </div>
+    </div>
+  </div>
+</div>
+HTML;
+
+$menu = menu_get_menu($categories_path, $items_path);
+$menu_categories = is_array($menu['categories'] ?? null) ? $menu['categories'] : [];
+$menu_items = is_array($menu['items'] ?? null) ? $menu['items'] : [];
+$items_by_category = [];
+foreach ($menu_items as $item) {
+    if (!is_array($item)) {
+        continue;
+    }
+    $category_id = (string)($item['category_id'] ?? '');
+    if ($category_id === '') {
+        continue;
+    }
+    if (!isset($items_by_category[$category_id])) {
+        $items_by_category[$category_id] = [];
+    }
+    $items_by_category[$category_id][] = $item;
+}
+
 ob_start();
 ?>
 <section id="adminAuthCard" class="card shadow-sm border-0 mb-3">
@@ -347,37 +509,164 @@ ob_start();
 </section>
 
 <div id="adminContent" class="row g-3 d-none">
-  <section class="col-12 col-lg-4">
+  <section class="col-12 col-lg-6">
     <div class="card shadow-sm border-0 h-100">
       <div class="card-body">
-        <h2 class="h5 mb-2" data-i18n="admin.event.title">Veranstaltung</h2>
-        <p class="text-secondary small mb-3" data-i18n="admin.event.note">Startet eine neue CSV und archiviert die alte.</p>
-        <div class="d-flex flex-wrap gap-2">
-          <button id="restartEvent" class="btn btn-outline-danger btn-sm" type="button">
-            <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i><span data-i18n="admin.event.restart">Neustarten</span>
-          </button>
+        <h2 class="h5 mb-2">Kategorien anlegen</h2>
+
+        <div class="row g-3">
+          <div class="col-12 col-lg-6">
+            <h3 class="h6 mb-2">Neue Kategorie</h3>
+            <label class="form-label small text-secondary" for="categoryName">Name</label>
+            <input id="categoryName" class="form-control" type="text" placeholder="z.B. Kaffee" autocomplete="off" inputmode="text">
+            <div class="form-check mt-2">
+              <input id="categoryActive" class="form-check-input" type="checkbox" checked>
+              <label class="form-check-label" for="categoryActive">Aktiv</label>
+            </div>
+            <div class="d-flex flex-wrap gap-2 mt-3">
+              <button id="categoryAdd" class="btn btn-primary btn-sm" type="button">Kategorie anlegen</button>
+            </div>
+            <div id="categoryStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
+          </div>
         </div>
-        <div id="restartStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
-        <hr class="my-3">
-        <label class="form-label small text-secondary" for="eventNameInput" data-i18n="admin.event.nameLabel">Veranstaltungsname</label>
-        <input
-          id="eventNameInput"
-          class="form-control"
-          type="text"
-          data-i18n-placeholder="admin.event.namePlaceholder"
-          placeholder="z.B. Sommerfest"
-          autocomplete="off"
-          inputmode="text"
-        >
-        <div class="d-flex flex-wrap gap-2 mt-3">
-          <button id="eventNameSave" class="btn btn-primary btn-sm" type="button">
-            <i class="bi bi-floppy me-1" aria-hidden="true"></i><span data-i18n="common.save">Speichern</span>
-          </button>
-        </div>
-        <div id="eventNameStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
       </div>
     </div>
-</section>
+  </section>
+  <section class="col-12 col-lg-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5 mb-2">Artikel verwalten</h2>
+        <p class="text-secondary small mb-3">Kategorien und Artikel anlegen, inkl. Preis und Aktiv-Status.</p>
+        <h3 class="h6 mb-2">Neuer Artikel</h3>
+            <label class="form-label small text-secondary" for="itemCategory">Kategorie</label>
+            <select id="itemCategory" class="form-select">
+              <?php foreach ($menu_categories as $category) {
+                  $cat_id = (string)($category['id'] ?? '');
+                  $cat_name = (string)($category['name'] ?? '');
+                  if ($cat_id === '') {
+                      continue;
+                  }
+                  ?>
+                <option value="<?php echo htmlspecialchars($cat_id, ENT_QUOTES, 'UTF-8'); ?>">
+                  <?php echo htmlspecialchars($cat_name !== '' ? $cat_name : 'Kategorie', ENT_QUOTES, 'UTF-8'); ?>
+                </option>
+              <?php } ?>
+            </select>
+            <label class="form-label small text-secondary mt-2" for="itemName">Name</label>
+            <input id="itemName" class="form-control" type="text" placeholder="z.B. Espresso" autocomplete="off" inputmode="text">
+            <label class="form-label small text-secondary mt-2" for="itemPrice">Preis</label>
+            <input id="itemPrice" class="form-control" type="text" placeholder="2.50" autocomplete="off" inputmode="decimal">
+            <label class="form-label small text-secondary mt-2" for="itemIngredients">Zutaten</label>
+            <input id="itemIngredients" class="form-control" type="text" placeholder="z.B. Limette, Minze, Zucker" autocomplete="off" inputmode="text">
+            <label class="form-label small text-secondary mt-2" for="itemTags">Tags</label>
+            <input id="itemTags" class="form-control" type="text" placeholder="z.B. gin, wodka" autocomplete="off" inputmode="text">
+            <label class="form-label small text-secondary mt-2" for="itemPreparation">Zubereitung</label>
+            <textarea id="itemPreparation" class="form-control" rows="2" placeholder="Kurzbeschreibung der Zubereitung"></textarea>
+            <div class="form-check mt-2">
+              <input id="itemActive" class="form-check-input" type="checkbox" checked>
+              <label class="form-check-label" for="itemActive">Aktiv</label>
+            </div>
+            <div class="d-flex flex-wrap gap-2 mt-3">
+              <button id="itemAdd" class="btn btn-primary btn-sm" type="button">Artikel anlegen</button>
+            </div>
+            <div id="itemStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+  <section class="col-12">
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <h2 class="h5 mb-2">Aktuelles Menue</h2>
+        <div id="menuStatus" class="text-secondary small mb-2" role="status" aria-live="polite"></div>
+        <div id="menuList" class="d-flex flex-column gap-3">
+          <?php if (!$menu_categories) { ?>
+            <div class="text-secondary small">Noch keine Kategorien angelegt.</div>
+          <?php } ?>
+          <?php foreach ($menu_categories as $category) {
+              if (!is_array($category)) {
+                  continue;
+              }
+              $cat_id = (string)($category['id'] ?? '');
+              $cat_name = (string)($category['name'] ?? '');
+              $cat_active = !empty($category['active']);
+              ?>
+            <div class="card border-0 shadow-sm" data-category-id="<?php echo htmlspecialchars($cat_id, ENT_QUOTES, 'UTF-8'); ?>">
+              <div class="card-body">
+                <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2 mb-3">
+                  <div class="flex-grow-1">
+                    <label class="form-label small text-secondary">Kategorie</label>
+                    <input class="form-control form-control-sm js-category-name" value="<?php echo htmlspecialchars($cat_name, ENT_QUOTES, 'UTF-8'); ?>">
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="form-check">
+                      <input class="form-check-input js-category-active" type="checkbox" <?php echo $cat_active ? 'checked' : ''; ?>>
+                      <label class="form-check-label">Aktiv</label>
+                    </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-action="save-category">Speichern</button>
+                  </div>
+                  <span class="badge <?php echo $cat_active ? 'text-bg-success' : 'text-bg-secondary'; ?> align-self-start">
+                    <?php echo $cat_active ? 'Aktiv' : 'Inaktiv'; ?>
+                  </span>
+                </div>
+                <?php
+                $category_items = $items_by_category[$cat_id] ?? [];
+                if (!$category_items) {
+                    echo '<div class="text-secondary small">Keine Artikel.</div>';
+                } else {
+                    echo '<div class="d-flex flex-column gap-2">';
+                    foreach ($category_items as $item) {
+                        $item_id = (string)($item['id'] ?? '');
+                        $item_name = (string)($item['name'] ?? '');
+                        $item_price = (string)($item['price'] ?? '0.00');
+                        $item_ingredients = $item['ingredients'] ?? [];
+                        $item_tags = $item['tags'] ?? [];
+                        $item_preparation = (string)($item['preparation'] ?? '');
+                        $item_ingredients_label = is_array($item_ingredients) ? implode(', ', $item_ingredients) : '';
+                        $item_tags_label = is_array($item_tags) ? implode(', ', $item_tags) : '';
+                        $item_active = !empty($item['active']);
+                        ?>
+                      <div class="border rounded px-3 py-2 bg-light" data-item-id="<?php echo htmlspecialchars($item_id, ENT_QUOTES, 'UTF-8'); ?>">
+                        <div class="row g-2 align-items-center">
+                          <div class="col-12 col-md-4">
+                            <label class="form-label small text-secondary">Artikel</label>
+                            <input class="form-control form-control-sm js-item-name" value="<?php echo htmlspecialchars($item_name, ENT_QUOTES, 'UTF-8'); ?>">
+                          </div>
+                          <div class="col-12 col-md-2">
+                            <label class="form-label small text-secondary">Preis</label>
+                            <input class="form-control form-control-sm js-item-price" value="<?php echo htmlspecialchars($item_price, ENT_QUOTES, 'UTF-8'); ?>">
+                          </div>
+                          <div class="col-12 col-md-6">
+                            <label class="form-label small text-secondary">Zutaten</label>
+                            <input class="form-control form-control-sm js-item-ingredients" value="<?php echo htmlspecialchars($item_ingredients_label, ENT_QUOTES, 'UTF-8'); ?>">
+                          </div>
+                          <div class="col-12 col-md-4">
+                            <label class="form-label small text-secondary">Tags</label>
+                            <input class="form-control form-control-sm js-item-tags" value="<?php echo htmlspecialchars($item_tags_label, ENT_QUOTES, 'UTF-8'); ?>">
+                          </div>
+                          <div class="col-12 col-md-8">
+                            <label class="form-label small text-secondary">Zubereitung</label>
+                            <input class="form-control form-control-sm js-item-preparation" value="<?php echo htmlspecialchars($item_preparation, ENT_QUOTES, 'UTF-8'); ?>">
+                          </div>
+                          <div class="col-12 col-md-4 d-flex flex-wrap align-items-center gap-2">
+                            <div class="form-check">
+                              <input class="form-check-input js-item-active" type="checkbox" <?php echo $item_active ? 'checked' : ''; ?>>
+                              <label class="form-check-label">Aktiv</label>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-action="save-item">Speichern</button>
+                          </div>
+                        </div>
+                      </div>
+                    <?php }
+                    echo '</div>';
+                }
+                ?>
+              </div>
+            </div>
+          <?php } ?>
+        </div>
+      </div>
+    </div>
+  </section>
 </div>
 <?php
 $content = ob_get_clean();
@@ -402,9 +691,11 @@ render_layout([
     'manifest' => '',
     'header' => $header,
     'content' => $content,
+    'modals' => $modals,
     'footer' => $footer,
     'head_extra' => '<meta name="robots" content="noindex, nofollow">',
     'scripts' => [
         'assets/admin.js',
+        'assets/menu.js',
     ],
 ]);

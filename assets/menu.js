@@ -1,6 +1,8 @@
-const ADMIN_TOKEN_KEY = "kekcounter.adminToken";
+if (!window.ADMIN_TOKEN_KEY) {
+  window.ADMIN_TOKEN_KEY = "kekcounter.adminToken";
+}
 
-const adminContent = document.getElementById("adminContent");
+const menuAdminContent = document.getElementById("adminContent");
 const categoryName = document.getElementById("categoryName");
 const categoryActive = document.getElementById("categoryActive");
 const categoryAdd = document.getElementById("categoryAdd");
@@ -9,19 +11,35 @@ const categoryStatus = document.getElementById("categoryStatus");
 const itemCategory = document.getElementById("itemCategory");
 const itemName = document.getElementById("itemName");
 const itemPrice = document.getElementById("itemPrice");
+const itemIngredients = document.getElementById("itemIngredients");
+const itemTags = document.getElementById("itemTags");
+const itemPreparation = document.getElementById("itemPreparation");
 const itemActive = document.getElementById("itemActive");
 const itemAdd = document.getElementById("itemAdd");
 const itemStatus = document.getElementById("itemStatus");
 
 const menuList = document.getElementById("menuList");
 const menuStatus = document.getElementById("menuStatus");
+const menuErrorModal = document.getElementById("menuErrorModal");
+const menuErrorMessage = document.getElementById("menuErrorMessage");
 
 function getAdminToken() {
   try {
-    return localStorage.getItem(ADMIN_TOKEN_KEY) || "";
+    return localStorage.getItem(window.ADMIN_TOKEN_KEY) || "";
   } catch (error) {
     return "";
   }
+}
+
+function showErrorModal(message) {
+  if (!menuErrorModal || !window.bootstrap?.Modal) {
+    return;
+  }
+  if (menuErrorMessage) {
+    menuErrorMessage.textContent = message || "Ein Fehler ist aufgetreten.";
+  }
+  const modal = bootstrap.Modal.getOrCreateInstance(menuErrorModal);
+  modal.show();
 }
 
 function setStatus(el, message, isError = false) {
@@ -41,10 +59,12 @@ function setButtonDisabled(button, disabled) {
   button.setAttribute("aria-busy", disabled ? "true" : "false");
 }
 
-async function apiRequest(action, payload) {
+async function menuRequest(action, payload) {
   const token = getAdminToken();
   if (!token) {
-    throw new Error("Admin token missing");
+    const message = "Admin-Token fehlt. Bitte erneut anmelden.";
+    showErrorModal(message);
+    throw new Error(message);
   }
   const response = await fetch(`menu.php?action=${action}`, {
     method: "POST",
@@ -59,6 +79,7 @@ async function apiRequest(action, payload) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = data?.error || "Request failed";
+    showErrorModal(message);
     throw new Error(message);
   }
   return data;
@@ -144,7 +165,7 @@ function renderMenu(menu) {
     header.appendChild(titleWrap);
     header.appendChild(actions);
     const badge = document.createElement("span");
-    badge.className = `badge ${category.active ? "text-bg-success" : "text-bg-secondary"} align-self-start`;
+    badge.className = `badge js-category-badge ${category.active ? "text-bg-success" : "text-bg-secondary"} align-self-start`;
     badge.textContent = category.active ? "Aktiv" : "Inaktiv";
     header.appendChild(badge);
     body.appendChild(header);
@@ -166,7 +187,7 @@ function renderMenu(menu) {
         rowGrid.className = "row g-2 align-items-center";
 
         const colName = document.createElement("div");
-        colName.className = "col-12 col-md-5";
+        colName.className = "col-12 col-md-4";
         const nameLabel = document.createElement("label");
         nameLabel.className = "form-label small text-secondary";
         nameLabel.textContent = "Artikel";
@@ -177,7 +198,7 @@ function renderMenu(menu) {
         colName.appendChild(nameInput);
 
         const colPrice = document.createElement("div");
-        colPrice.className = "col-12 col-md-3";
+        colPrice.className = "col-12 col-md-2";
         const priceLabel = document.createElement("label");
         priceLabel.className = "form-label small text-secondary";
         priceLabel.textContent = "Preis";
@@ -186,6 +207,41 @@ function renderMenu(menu) {
         priceInput.value = item.price || "0.00";
         colPrice.appendChild(priceLabel);
         colPrice.appendChild(priceInput);
+
+        const colIngredients = document.createElement("div");
+        colIngredients.className = "col-12 col-md-6";
+        const ingredientsLabel = document.createElement("label");
+        ingredientsLabel.className = "form-label small text-secondary";
+        ingredientsLabel.textContent = "Zutaten";
+        const ingredientsInput = document.createElement("input");
+        ingredientsInput.className = "form-control form-control-sm js-item-ingredients";
+        const ingredients = Array.isArray(item.ingredients) ? item.ingredients.join(", ") : "";
+        ingredientsInput.value = ingredients;
+        colIngredients.appendChild(ingredientsLabel);
+        colIngredients.appendChild(ingredientsInput);
+
+        const colTags = document.createElement("div");
+        colTags.className = "col-12 col-md-4";
+        const tagsLabel = document.createElement("label");
+        tagsLabel.className = "form-label small text-secondary";
+        tagsLabel.textContent = "Tags";
+        const tagsInput = document.createElement("input");
+        tagsInput.className = "form-control form-control-sm js-item-tags";
+        const tags = Array.isArray(item.tags) ? item.tags.join(", ") : "";
+        tagsInput.value = tags;
+        colTags.appendChild(tagsLabel);
+        colTags.appendChild(tagsInput);
+
+        const colPreparation = document.createElement("div");
+        colPreparation.className = "col-12 col-md-8";
+        const preparationLabel = document.createElement("label");
+        preparationLabel.className = "form-label small text-secondary";
+        preparationLabel.textContent = "Zubereitung";
+        const preparationInput = document.createElement("input");
+        preparationInput.className = "form-control form-control-sm js-item-preparation";
+        preparationInput.value = item.preparation || "";
+        colPreparation.appendChild(preparationLabel);
+        colPreparation.appendChild(preparationInput);
 
         const colActions = document.createElement("div");
         colActions.className = "col-12 col-md-4 d-flex flex-wrap align-items-center gap-2";
@@ -207,9 +263,16 @@ function renderMenu(menu) {
         itemSave.textContent = "Speichern";
         colActions.appendChild(itemActiveWrap);
         colActions.appendChild(itemSave);
+        const itemBadge = document.createElement("span");
+        itemBadge.className = `badge js-item-badge ${item.active ? "text-bg-success" : "text-bg-secondary"}`;
+        itemBadge.textContent = item.active ? "Aktiv" : "Inaktiv";
+        colActions.appendChild(itemBadge);
 
         rowGrid.appendChild(colName);
         rowGrid.appendChild(colPrice);
+        rowGrid.appendChild(colIngredients);
+        rowGrid.appendChild(colTags);
+        rowGrid.appendChild(colPreparation);
         rowGrid.appendChild(colActions);
         row.appendChild(rowGrid);
         list.appendChild(row);
@@ -234,6 +297,15 @@ function populateCategorySelect(menu) {
     option.textContent = category.name || "Kategorie";
     itemCategory.appendChild(option);
   });
+}
+
+function updateBadge(badge, isActive) {
+  if (!badge) {
+    return;
+  }
+  badge.classList.toggle("text-bg-success", isActive);
+  badge.classList.toggle("text-bg-secondary", !isActive);
+  badge.textContent = isActive ? "Aktiv" : "Inaktiv";
 }
 
 async function loadMenu() {
@@ -262,15 +334,22 @@ async function addCategory() {
   }
   setButtonDisabled(categoryAdd, true);
   try {
-    await apiRequest("add_category", {
+    const response = await menuRequest("add_category", {
       name,
       active: categoryActive.checked,
     });
     categoryName.value = "";
     categoryActive.checked = true;
     setStatus(categoryStatus, "Kategorie gespeichert.");
-    await loadMenu();
+    if (response?.menu) {
+      renderMenu(response.menu);
+      populateCategorySelect(response.menu);
+      setStatus(menuStatus, "Menue aktualisiert.");
+    } else {
+      await loadMenu();
+    }
   } catch (error) {
+    showErrorModal(error.message || "Speichern fehlgeschlagen.");
     setStatus(categoryStatus, error.message || "Speichern fehlgeschlagen.", true);
   } finally {
     setButtonDisabled(categoryAdd, false);
@@ -284,24 +363,46 @@ async function addItem() {
   const categoryId = itemCategory.value;
   const name = itemName.value.trim();
   const price = itemPrice.value.trim();
+  const ingredients = itemIngredients ? itemIngredients.value.trim() : "";
+  const tags = itemTags ? itemTags.value.trim() : "";
+  const preparation = itemPreparation ? itemPreparation.value.trim() : "";
   if (!categoryId || !name) {
     setStatus(itemStatus, "Bitte Kategorie und Namen angeben.", true);
     return;
   }
   setButtonDisabled(itemAdd, true);
   try {
-    await apiRequest("add_item", {
+    const response = await menuRequest("add_item", {
       categoryId,
       name,
       price,
+      ingredients,
+      tags,
+      preparation,
       active: itemActive.checked,
     });
     itemName.value = "";
     itemPrice.value = "";
+    if (itemIngredients) {
+      itemIngredients.value = "";
+    }
+    if (itemTags) {
+      itemTags.value = "";
+    }
+    if (itemPreparation) {
+      itemPreparation.value = "";
+    }
     itemActive.checked = true;
     setStatus(itemStatus, "Artikel gespeichert.");
-    await loadMenu();
+    if (response?.menu) {
+      renderMenu(response.menu);
+      populateCategorySelect(response.menu);
+      setStatus(menuStatus, "Menue aktualisiert.");
+    } else {
+      await loadMenu();
+    }
   } catch (error) {
+    showErrorModal(error.message || "Speichern fehlgeschlagen.");
     setStatus(itemStatus, error.message || "Speichern fehlgeschlagen.", true);
   } finally {
     setButtonDisabled(itemAdd, false);
@@ -320,14 +421,14 @@ if (itemAdd) {
   });
 }
 
-if (adminContent) {
+if (menuAdminContent) {
   const observer = new MutationObserver(() => {
-    if (!adminContent.classList.contains("d-none")) {
+    if (!menuAdminContent.classList.contains("d-none")) {
       loadMenu();
     }
   });
-  observer.observe(adminContent, { attributes: true, attributeFilter: ["class"] });
-  if (!adminContent.classList.contains("d-none")) {
+  observer.observe(menuAdminContent, { attributes: true, attributeFilter: ["class"] });
+  if (!menuAdminContent.classList.contains("d-none")) {
     loadMenu();
   }
 }
@@ -346,6 +447,7 @@ if (menuList) {
       }
       const nameInput = card.querySelector(".js-category-name");
       const activeInput = card.querySelector(".js-category-active");
+      const badge = card.querySelector(".js-category-badge");
       const id = card.dataset.categoryId || "";
       const name = nameInput ? nameInput.value.trim() : "";
       const active = activeInput ? activeInput.checked : false;
@@ -355,10 +457,17 @@ if (menuList) {
       }
       setButtonDisabled(button, true);
       try {
-        await apiRequest("update_category", { id, name, active });
+        const response = await menuRequest("update_category", { id, name, active });
         setStatus(menuStatus, "Kategorie gespeichert.");
-        await loadMenu();
+        updateBadge(badge, active);
+        if (response?.menu) {
+          renderMenu(response.menu);
+          populateCategorySelect(response.menu);
+        } else {
+          await loadMenu();
+        }
       } catch (error) {
+        showErrorModal(error.message || "Speichern fehlgeschlagen.");
         setStatus(menuStatus, error.message || "Speichern fehlgeschlagen.", true);
       } finally {
         setButtonDisabled(button, false);
@@ -372,10 +481,17 @@ if (menuList) {
       }
       const nameInput = row.querySelector(".js-item-name");
       const priceInput = row.querySelector(".js-item-price");
+      const ingredientsInput = row.querySelector(".js-item-ingredients");
+      const tagsInput = row.querySelector(".js-item-tags");
+      const preparationInput = row.querySelector(".js-item-preparation");
       const activeInput = row.querySelector(".js-item-active");
+      const badge = row.querySelector(".js-item-badge");
       const id = row.dataset.itemId || "";
       const name = nameInput ? nameInput.value.trim() : "";
       const price = priceInput ? priceInput.value.trim() : "";
+      const ingredients = ingredientsInput ? ingredientsInput.value.trim() : "";
+      const tags = tagsInput ? tagsInput.value.trim() : "";
+      const preparation = preparationInput ? preparationInput.value.trim() : "";
       const active = activeInput ? activeInput.checked : false;
       if (!id || !name) {
         setStatus(menuStatus, "Bitte Artikel-Namen angeben.", true);
@@ -383,10 +499,25 @@ if (menuList) {
       }
       setButtonDisabled(button, true);
       try {
-        await apiRequest("update_item", { id, name, price, active });
+        const response = await menuRequest("update_item", {
+          id,
+          name,
+          price,
+          ingredients,
+          tags,
+          preparation,
+          active,
+        });
         setStatus(menuStatus, "Artikel gespeichert.");
-        await loadMenu();
+        updateBadge(badge, active);
+        if (response?.menu) {
+          renderMenu(response.menu);
+          populateCategorySelect(response.menu);
+        } else {
+          await loadMenu();
+        }
       } catch (error) {
+        showErrorModal(error.message || "Speichern fehlgeschlagen.");
         setStatus(menuStatus, error.message || "Speichern fehlgeschlagen.", true);
       } finally {
         setButtonDisabled(button, false);
