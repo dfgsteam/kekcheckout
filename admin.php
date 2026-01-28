@@ -346,9 +346,9 @@ require_once __DIR__ . '/private/layout.php';
 $header = <<<HTML
 <header class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-end gap-3 mb-4">
   <div>
-    <div class="text-uppercase text-primary small fw-semibold mb-2" data-i18n="admin.tagline">Admin</div>
-    <h1 class="display-6 fw-semibold mb-2" data-i18n="admin.title">Kek-Counter Admin</h1>
-    <p class="text-secondary mb-0" data-i18n="admin.subtitle">Veranstaltung, CSV und Zugang verwalten.</p>
+    <div class="text-uppercase text-primary small fw-semibold mb-2">Kek - Checkout</div>
+    <h1 class="display-6 fw-semibold mb-2">Admin</h1>
+    <p class="text-secondary mb-0">Konfiguration und Verwaltung.</p>
   </div>
   <div class="icon-actions">
     <a
@@ -370,6 +370,15 @@ $header = <<<HTML
       <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
       <span class="btn-icon-text" data-i18n="nav.logout">Abmelden</span>
     </button>
+    <a
+      class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
+      href="/menu.php"
+      data-i18n-aria-label="nav.back"
+      data-i18n-title="nav.back"
+    >
+      <i class="bi bi-book" aria-hidden="true"></i>
+      <span class="btn-icon-text" data-i18n="nav.back">Menu</span>
+    </a>
     <button
       class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
       type="button"
