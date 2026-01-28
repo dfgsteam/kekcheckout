@@ -232,6 +232,35 @@ $modals = <<<HTML
     </div>
   </div>
 </div>
+<div class="modal fade" id="accessDialog" tabindex="-1" aria-labelledby="accessTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5" id="accessTitle" data-i18n="index.modal.title">Access-Token</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" data-i18n-aria-label="common.close" aria-label="Schliessen"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary small" data-i18n="index.modal.note">Token wird nur lokal im Browser gespeichert.</p>
+        <label class="form-label small text-secondary" for="accessToken" data-i18n="index.modal.placeholder">Token</label>
+        <input
+          id="accessToken"
+          class="form-control"
+          type="password"
+          autocomplete="off"
+          inputmode="text"
+          data-i18n-placeholder="index.modal.placeholder"
+          placeholder="Token"
+        >
+        <div id="accessStatus" class="text-secondary small mt-2" role="status" aria-live="polite" data-i18n="index.modal.status.none">Kein Token gespeichert</div>
+      </div>
+      <div class="modal-footer">
+        <button id="accessClear" class="btn btn-outline-secondary" type="button" data-i18n="common.delete">Loeschen</button>
+        <button id="accessSave" class="btn btn-primary" type="button" data-i18n="common.save">Speichern</button>
+        <button id="accessClose" class="btn btn-link" type="button" data-bs-dismiss="modal" data-i18n="common.close">Schliessen</button>
+      </div>
+    </div>
+  </div>
+</div>
 HTML;
 
 $inline_scripts = [
@@ -317,4 +346,5 @@ render_layout([
     'content' => $content,
     'modals' => $modals,
     'inline_scripts' => $inline_scripts,
+    'scripts' => ['assets/app.js'],
 ]);
