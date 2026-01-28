@@ -1,0 +1,23 @@
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^private/ - [F]
+</IfModule>
+
+<IfModule mod_alias.c>
+  RedirectMatch 403 ^/private/
+</IfModule>
+
+<IfModule mod_authz_core.c>
+  <FilesMatch "^(visitors\.csv|visitorscounter\.py|visitors\.jpg|settings\.json|request\.log|\.access_token|\.admin_token|\.event_name)$">
+    Require all denied
+  </FilesMatch>
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+  <FilesMatch "^(visitors\.csv|visitorscounter\.py|visitors\.jpg|settings\.json|request\.log|\.access_token|\.admin_token|\.event_name)$">
+    Order allow,deny
+    Deny from all
+  </FilesMatch>
+</IfModule>

@@ -1,0 +1,22 @@
+{
+  "name": "Kek-Counter",
+  "short_name": "Kek",
+  "description": "Live-Kekzaehler mit Verlauf.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#e6edf7",
+  "theme_color": "#e6edf7",
+  "icons": [
+    {
+      "src": "assets/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

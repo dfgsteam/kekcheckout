@@ -1,0 +1,8 @@
+{
+  "threshold": 150,
+  "max_points": 10000,
+  "chart_max_points": 2000,
+  "window_hours": 3,
+  "tick_minutes": 15,
+  "capacity_default": 150
+}
