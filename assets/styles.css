@@ -33,6 +33,10 @@ html[data-bs-theme="dark"] {
   --chart-retention-fill: rgba(34, 211, 238, 0.2);
 }
 
+html[data-bs-theme="dark"] .bg-light {
+  background-color: var(--bs-tertiary-bg) !important;
+}
+
 html[data-accessibility="true"] {
   font-size: 18px;
   color-scheme: dark;
