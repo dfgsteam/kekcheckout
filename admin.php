@@ -4,7 +4,8 @@ declare(strict_types=1);
 date_default_timezone_set('Europe/Berlin');
 
 $csv_path = __DIR__ . '/private/visitors.csv';
-$access_token_path = __DIR__ . '/private/.access_token';
+$access_tokens_path = __DIR__ . '/private/access_tokens.json';
+$legacy_access_token_path = __DIR__ . '/private/.access_token';
 $admin_token_path = __DIR__ . '/private/.admin_token';
 $archive_dir = __DIR__ . '/archives';
 $settings_path = __DIR__ . '/private/settings.json';
@@ -144,13 +145,136 @@ if ($action !== null) {
     if ($action === 'set_access_token') {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
-        $token = trim((string)($payload['token'] ?? ($_POST['token'] ?? '')));
+        $token = normalize_access_token_value((string)($payload['token'] ?? ($_POST['token'] ?? '')), 160);
         if ($token === '') {
             send_json_error(400, 'Token missing');
         }
-        file_put_contents($access_token_path, $token, LOCK_EX);
+        $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
+        $updated = false;
+        foreach ($tokens as $index => $entry) {
+            if (($entry['id'] ?? '') === 'default') {
+                $tokens[$index]['name'] = 'Default';
+                $tokens[$index]['token'] = $token;
+                $tokens[$index]['active'] = true;
+                $updated = true;
+                break;
+            }
+        }
+        if (!$updated) {
+            $tokens[] = [
+                'id' => 'default',
+                'name' => 'Default',
+                'token' => $token,
+                'active' => true,
+            ];
+        }
+        if (!save_access_tokens($access_tokens_path, $tokens)) {
+            send_json_error(500, 'Save failed');
+        }
         log_event($log_path, 'admin:set_access_token', 200);
         echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    if ($action === 'get_access_tokens') {
+        header('Content-Type: application/json; charset=utf-8');
+        $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
+        echo json_encode(['accessTokens' => $tokens]);
+        exit;
+    }
+
+    if ($action === 'add_access_token') {
+        header('Content-Type: application/json; charset=utf-8');
+        $payload = read_json_body();
+        $name = normalize_access_label((string)($payload['name'] ?? ''), 40);
+        $token = normalize_access_token_value((string)($payload['token'] ?? ''), 160);
+        $active = (bool)($payload['active'] ?? true);
+        if ($name === '' || $token === '') {
+            send_json_error(400, 'Missing data');
+        }
+        $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
+        $base_id = access_slugify_id($name);
+        if ($base_id === '') {
+            $base_id = 'key';
+        }
+        $id = $base_id;
+        $suffix = 2;
+        $ids = array_map(fn($entry) => (string)($entry['id'] ?? ''), $tokens);
+        while (in_array($id, $ids, true)) {
+            $id = $base_id . '-' . $suffix;
+            $suffix++;
+        }
+        $tokens[] = [
+            'id' => $id,
+            'name' => $name,
+            'token' => $token,
+            'active' => $active,
+        ];
+        if (!save_access_tokens($access_tokens_path, $tokens)) {
+            send_json_error(500, 'Save failed');
+        }
+        log_event($log_path, 'admin:add_access_token', 200, ['id' => $id, 'name' => $name]);
+        echo json_encode(['ok' => true, 'accessTokens' => $tokens]);
+        exit;
+    }
+
+    if ($action === 'update_access_token') {
+        header('Content-Type: application/json; charset=utf-8');
+        $payload = read_json_body();
+        $id = (string)($payload['id'] ?? '');
+        $name = normalize_access_label((string)($payload['name'] ?? ''), 40);
+        $token = normalize_access_token_value((string)($payload['token'] ?? ''), 160);
+        $active = (bool)($payload['active'] ?? true);
+        if ($id === '' || $name === '' || $token === '') {
+            send_json_error(400, 'Missing data');
+        }
+        $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
+        $found = false;
+        foreach ($tokens as $index => $entry) {
+            if (($entry['id'] ?? '') === $id) {
+                $tokens[$index]['name'] = $name;
+                $tokens[$index]['token'] = $token;
+                $tokens[$index]['active'] = $active;
+                $found = true;
+                break;
+            }
+        }
+        if (!$found) {
+            send_json_error(404, 'Not found');
+        }
+        if (!save_access_tokens($access_tokens_path, $tokens)) {
+            send_json_error(500, 'Save failed');
+        }
+        log_event($log_path, 'admin:update_access_token', 200, ['id' => $id, 'name' => $name]);
+        echo json_encode(['ok' => true, 'accessTokens' => $tokens]);
+        exit;
+    }
+
+    if ($action === 'delete_access_token') {
+        header('Content-Type: application/json; charset=utf-8');
+        $payload = read_json_body();
+        $id = (string)($payload['id'] ?? '');
+        if ($id === '') {
+            send_json_error(400, 'Missing data');
+        }
+        $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
+        $next = [];
+        $found = false;
+        foreach ($tokens as $entry) {
+            if (($entry['id'] ?? '') === $id) {
+                $found = true;
+                continue;
+            }
+            $next[] = $entry;
+        }
+        if (!$found) {
+            send_json_error(404, 'Not found');
+        }
+        if (!save_access_tokens($access_tokens_path, $next)) {
+            send_json_error(500, 'Save failed');
+        }
+        log_event($log_path, 'admin:delete_access_token', 200, ['id' => $id]);
+        echo json_encode(['ok' => true, 'accessTokens' => $next]);
         exit;
     }
 
@@ -498,23 +622,34 @@ ob_start();
       <section class="col-12 mb-lg-3">
         <div class="card shadow-sm border-0 h-100">
           <div class="card-body">
-            <h2 class="h5 mb-2" data-i18n="admin.accessToken.title">Access-Token</h2>
-            <p class="text-secondary small mb-3" data-i18n="admin.accessToken.note">Setzt den Access-Token fuer +1/-1.</p>
+            <h2 class="h5 mb-2">Access-Keys</h2>
+            <p class="text-secondary small mb-3">Mehrere Kassen-Keys mit Namen anlegen.</p>
+            <label class="form-label small text-secondary" for="accessTokenNameNew">Name</label>
+            <input
+              id="accessTokenNameNew"
+              class="form-control"
+              type="text"
+              placeholder="z.B. Marvin"
+              autocomplete="off"
+              inputmode="text"
+            >
+            <label class="form-label small text-secondary mt-2" for="accessTokenNew">Key</label>
             <input
               id="accessTokenNew"
               class="form-control"
               type="password"
-              data-i18n-placeholder="admin.accessToken.placeholder"
-              placeholder="Neues Access-Token"
+              placeholder="Neuer Access-Token"
               autocomplete="off"
               inputmode="text"
             >
             <div class="d-flex flex-wrap gap-2 mt-3">
-              <button id="accessTokenSave" class="btn btn-primary btn-sm" type="button">
-                <i class="bi bi-floppy me-1" aria-hidden="true"></i><span data-i18n="common.save">Speichern</span>
+              <button id="accessTokenAdd" class="btn btn-primary btn-sm" type="button">
+                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i><span>Anlegen</span>
               </button>
             </div>
             <div id="accessTokenStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
+            <h3 class="h6 mt-4 mb-2">Vorhandene Keys</h3>
+            <div id="accessTokenList" class="d-flex flex-column gap-2"></div>
           </div>
         </div>
       </section>

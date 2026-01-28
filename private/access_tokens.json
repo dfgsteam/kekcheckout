@@ -1,0 +1,14 @@
+[
+    {
+        "id": "default",
+        "name": "Default",
+        "token": "test",
+        "active": true
+    },
+    {
+        "id": "marvin",
+        "name": "Marvin",
+        "token": "test",
+        "active": true
+    }
+]

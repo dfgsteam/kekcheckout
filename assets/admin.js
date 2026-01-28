@@ -30,8 +30,10 @@ const logSearchInput = document.getElementById("logSearch");
 const logStatusFilter = document.getElementById("logStatusFilter");
 const logLimitSelect = document.getElementById("logLimit");
 
+const accessTokenNameInput = document.getElementById("accessTokenNameNew");
 const accessTokenInput = document.getElementById("accessTokenNew");
-const accessTokenSave = document.getElementById("accessTokenSave");
+const accessTokenAdd = document.getElementById("accessTokenAdd");
+const accessTokenList = document.getElementById("accessTokenList");
 const accessTokenStatus = document.getElementById("accessTokenStatus");
 const adminTokenInputNew = document.getElementById("adminTokenNew");
 const adminTokenSave = document.getElementById("adminTokenSave");
@@ -1077,22 +1079,189 @@ async function restartEvent(triggerButton) {
   }
 }
 
-/** Save a new access token to the backend. */
-async function saveAccessToken(triggerButton) {
+/** Render access token list rows. */
+function renderAccessTokens(tokens) {
+  if (!accessTokenList) {
+    return;
+  }
+  accessTokenList.innerHTML = "";
+  if (!tokens.length) {
+    const empty = document.createElement("div");
+    empty.className = "text-secondary small";
+    empty.textContent = "Keine Keys vorhanden.";
+    accessTokenList.appendChild(empty);
+    return;
+  }
+  tokens.forEach((entry) => {
+    const row = document.createElement("div");
+    row.className = "border rounded px-3 py-2 bg-light";
+    row.dataset.tokenId = entry.id || "";
+    const rowGrid = document.createElement("div");
+    rowGrid.className = "row g-2 align-items-center";
+
+    const colName = document.createElement("div");
+    colName.className = "col-12 col-md-4";
+    const nameLabel = document.createElement("label");
+    nameLabel.className = "form-label small text-secondary";
+    nameLabel.textContent = "Name";
+    const nameInput = document.createElement("input");
+    nameInput.className = "form-control form-control-sm js-access-token-name";
+    nameInput.value = entry.name || "";
+    colName.appendChild(nameLabel);
+    colName.appendChild(nameInput);
+
+    const colToken = document.createElement("div");
+    colToken.className = "col-12 col-md-4";
+    const tokenLabel = document.createElement("label");
+    tokenLabel.className = "form-label small text-secondary";
+    tokenLabel.textContent = "Key";
+    const tokenInput = document.createElement("input");
+    tokenInput.className = "form-control form-control-sm js-access-token-value";
+    tokenInput.value = entry.token || "";
+    colToken.appendChild(tokenLabel);
+    colToken.appendChild(tokenInput);
+
+    const colActive = document.createElement("div");
+    colActive.className = "col-12 col-md-2";
+    const activeLabel = document.createElement("label");
+    activeLabel.className = "form-label small text-secondary";
+    activeLabel.textContent = "Aktiv";
+    const activeWrap = document.createElement("div");
+    activeWrap.className = "form-check";
+    const activeInput = document.createElement("input");
+    activeInput.className = "form-check-input js-access-token-active";
+    activeInput.type = "checkbox";
+    activeInput.checked = Boolean(entry.active);
+    activeWrap.appendChild(activeInput);
+    colActive.appendChild(activeLabel);
+    colActive.appendChild(activeWrap);
+
+    const colActions = document.createElement("div");
+    colActions.className = "col-12 col-md-2 d-flex flex-wrap align-items-center gap-2";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "btn btn-outline-primary btn-sm";
+    saveBtn.dataset.action = "save-access-token";
+    saveBtn.textContent = "Speichern";
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn-outline-danger btn-sm";
+    deleteBtn.dataset.action = "delete-access-token";
+    deleteBtn.textContent = "Loeschen";
+    colActions.appendChild(saveBtn);
+    colActions.appendChild(deleteBtn);
+
+    rowGrid.appendChild(colName);
+    rowGrid.appendChild(colToken);
+    rowGrid.appendChild(colActive);
+    rowGrid.appendChild(colActions);
+    row.appendChild(rowGrid);
+    accessTokenList.appendChild(row);
+  });
+}
+
+/** Fetch access tokens from the backend. */
+async function loadAccessTokens() {
+  if (!accessTokenList) {
+    return;
+  }
+  setStatus(accessTokenStatus, "Lade Keys...");
+  try {
+    const response = await adminFetch("get_access_tokens");
+    const data = await response.json().catch(() => ({}));
+    const tokens = Array.isArray(data.accessTokens) ? data.accessTokens : [];
+    renderAccessTokens(tokens);
+    setStatus(accessTokenStatus, "Keys geladen.");
+  } catch (error) {
+    console.error(error);
+    setStatus(accessTokenStatus, "Laden fehlgeschlagen.", true);
+  }
+}
+
+/** Add a new access token. */
+async function addAccessToken(triggerButton) {
+  const name = accessTokenNameInput ? accessTokenNameInput.value.trim() : "";
   const token = accessTokenInput ? accessTokenInput.value.trim() : "";
-  if (!token) {
-    setStatus(accessTokenStatus, t("token.missing"), true);
-    accessTokenInput?.focus();
+  if (!name || !token) {
+    setStatus(accessTokenStatus, "Name und Key benoetigt.", true);
+    if (!name) {
+      accessTokenNameInput?.focus();
+    } else {
+      accessTokenInput?.focus();
+    }
     return;
   }
   setStatus(accessTokenStatus, t("common.saving"));
   setButtonLoading(triggerButton, true, t("common.savingShort"));
   try {
-    await adminFetch("set_access_token", { body: { token } });
-    setStatus(accessTokenStatus, t("token.saved"));
+    const response = await adminFetch("add_access_token", {
+      body: { name, token, active: true },
+    });
+    const data = await response.json().catch(() => ({}));
+    const tokens = Array.isArray(data.accessTokens) ? data.accessTokens : [];
+    renderAccessTokens(tokens);
+    setStatus(accessTokenStatus, "Key gespeichert.");
+    if (accessTokenNameInput) {
+      accessTokenNameInput.value = "";
+    }
     if (accessTokenInput) {
       accessTokenInput.value = "";
     }
+  } catch (error) {
+    console.error(error);
+    setStatus(accessTokenStatus, t("common.saveFailed"), true);
+  } finally {
+    setButtonLoading(triggerButton, false);
+  }
+}
+
+/** Update an existing access token. */
+async function updateAccessToken(row, triggerButton) {
+  const id = row.dataset.tokenId || "";
+  const nameInput = row.querySelector(".js-access-token-name");
+  const tokenInput = row.querySelector(".js-access-token-value");
+  const activeInput = row.querySelector(".js-access-token-active");
+  const name = nameInput ? nameInput.value.trim() : "";
+  const token = tokenInput ? tokenInput.value.trim() : "";
+  const active = activeInput ? activeInput.checked : false;
+  if (!id || !name || !token) {
+    setStatus(accessTokenStatus, "Name und Key benoetigt.", true);
+    return;
+  }
+  setStatus(accessTokenStatus, t("common.saving"));
+  setButtonLoading(triggerButton, true, t("common.savingShort"));
+  try {
+    const response = await adminFetch("update_access_token", {
+      body: { id, name, token, active },
+    });
+    const data = await response.json().catch(() => ({}));
+    const tokens = Array.isArray(data.accessTokens) ? data.accessTokens : [];
+    renderAccessTokens(tokens);
+    setStatus(accessTokenStatus, "Key gespeichert.");
+  } catch (error) {
+    console.error(error);
+    setStatus(accessTokenStatus, t("common.saveFailed"), true);
+  } finally {
+    setButtonLoading(triggerButton, false);
+  }
+}
+
+/** Delete an access token. */
+async function deleteAccessToken(row, triggerButton) {
+  const id = row.dataset.tokenId || "";
+  if (!id) {
+    return;
+  }
+  if (!window.confirm("Key wirklich loeschen?")) {
+    return;
+  }
+  setButtonLoading(triggerButton, true, t("common.loading"));
+  try {
+    const response = await adminFetch("delete_access_token", { body: { id } });
+    const data = await response.json().catch(() => ({}));
+    const tokens = Array.isArray(data.accessTokens) ? data.accessTokens : [];
+    renderAccessTokens(tokens);
+    setStatus(accessTokenStatus, "Key geloescht.");
   } catch (error) {
     console.error(error);
     setStatus(accessTokenStatus, t("common.saveFailed"), true);
@@ -1141,7 +1310,13 @@ if (adminSave && adminTokenInput) {
     }
     setAdminToken(token);
     setButtonLoading(adminSave, true, t("common.savingShort"));
-    await Promise.all([loadArchives(), loadEventName(), loadSettings(), loadLogs()]);
+    await Promise.all([
+      loadArchives(),
+      loadEventName(),
+      loadSettings(),
+      loadLogs(),
+      loadAccessTokens(),
+    ]);
     setButtonLoading(adminSave, false);
   });
 }
@@ -1249,9 +1424,9 @@ if (logDownload) {
   });
 }
 
-if (accessTokenSave) {
-  accessTokenSave.addEventListener("click", () => {
-    saveAccessToken(accessTokenSave);
+if (accessTokenAdd) {
+  accessTokenAdd.addEventListener("click", () => {
+    addAccessToken(accessTokenAdd);
   });
 }
 
@@ -1280,7 +1455,36 @@ if (accessTokenInput) {
   accessTokenInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      accessTokenSave?.click();
+      accessTokenAdd?.click();
+    }
+  });
+}
+
+if (accessTokenNameInput) {
+  accessTokenNameInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      accessTokenAdd?.click();
+    }
+  });
+}
+
+if (accessTokenList) {
+  accessTokenList.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-action]");
+    if (!button) {
+      return;
+    }
+    const row = button.closest("[data-token-id]");
+    if (!row) {
+      return;
+    }
+    const action = button.dataset.action;
+    if (action === "save-access-token") {
+      updateAccessToken(row, button);
+    }
+    if (action === "delete-access-token") {
+      deleteAccessToken(row, button);
     }
   });
 }
@@ -1406,4 +1610,5 @@ if (getAdminToken()) {
   loadEventName();
   loadSettings();
   loadLogs();
+  loadAccessTokens();
 }
