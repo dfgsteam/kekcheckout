@@ -69,7 +69,7 @@ render_layout([
 - `modals`: Zusatz-Modals (z. B. Access-Modal).
 - `head_extra`: Zusaetzliche `<head>`-Tags (z. B. Robots-Tag).
 - `include_settings`: `true|false` (Settings-Modal + settings.js).
-- `inline_scripts`: Array mit Inline-JS (Strings, ohne `<script>` Tags).
+- `inline_scripts`: Array mit Inline-JS (Strings, ohne `<script>` Tags, wird mit CSP-Nonce versehen).
 - `scripts`: Array mit JS-Dateien (Strings, inkl. externen URLs).
 
 ## Typische Pattern
@@ -85,6 +85,10 @@ render_layout([
   'inline_scripts' => $inline_scripts,
 ]);
 ```
+
+### 5) CSP / Nonce (Hinweis)
+Das Layout setzt automatisch eine Content-Security-Policy und vergibt pro Response einen Nonce fuer Inline-Skripte.\n
+Inline-JS sollte daher **immer** ueber `inline_scripts` gehen (keine `<script>` Tags direkt in Templates).
 
 ### 2) Settings-Modal deaktivieren
 ```php
