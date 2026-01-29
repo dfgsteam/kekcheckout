@@ -264,7 +264,7 @@ $header = <<<HTML
     <h1 class="display-6 fw-semibold mb-2">Analyse</h1>
     <p class="text-secondary mb-0">Auswertungen und Trends fuer den Checkout.</p>
   </div>
-  <div class="icon-actions">
+  <div class="icon-actions icon-actions--split">
     <a
       class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
       href="index.php"
@@ -430,11 +430,26 @@ ob_start();
 <?php
 $content = ob_get_clean();
 
+$footer = <<<HTML
+<footer class="mt-4 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2 small text-secondary">
+  <div class="d-flex flex-wrap gap-2">
+    <a class="link-secondary text-decoration-none" href="https://julius-hunold.de/datenschutz" target="_blank" rel="noopener" data-i18n="footer.privacy">Datenschutz</a>
+    <span class="text-secondary" aria-hidden="true">•</span>
+    <a class="link-secondary text-decoration-none" href="https://julius-hunold.de/impressum" target="_blank" rel="noopener" data-i18n="footer.imprint">Impressum</a>
+  </div>
+  <div>
+    <span data-i18n="footer.builtBy">Erstellt von</span>
+    <a class="link-secondary text-decoration-none" href="https://hunold24.de" target="_blank" rel="noopener">Julius Hunold</a>
+  </div>
+</footer>
+HTML;
+
 render_layout([
     'title' => 'Kek - Checkout Analyse',
     'description' => 'Analyse fuer den Checkout.',
     'header' => $header,
     'content' => $content,
+    'footer' => $footer,
     'head_extra' => '<meta name="robots" content="noindex, nofollow">',
     'manifest' => '',
     'include_chart_js' => true,
