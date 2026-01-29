@@ -98,8 +98,7 @@ function setStatus(el, message, isError = false) {
     return;
   }
   el.textContent = message;
-  el.classList.toggle("text-danger", isError);
-  el.classList.toggle("text-secondary", !isError);
+  el.className = isError ? "text-danger small mt-2" : "text-secondary small mt-2";
 }
 
 /** Guard against repeated actions in quick succession. */
@@ -196,7 +195,7 @@ function applyTooltips(scope = document) {
 async function verifyAdminToken(token) {
   try {
     const response = await fetch("admin.php?action=get_settings", {
-      method: "POST",
+      method: "GET",
       cache: "no-store",
       headers: {
         "X-Requested-With": "fetch",
@@ -282,10 +281,14 @@ async function adminFetch(action, options = {}) {
   if (!token) {
     throw new Error("Admin token missing");
   }
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
   const headers = {
     "X-Requested-With": "fetch",
     "X-Admin-Token": token,
   };
+  if (csrfToken) {
+    headers["X-CSRF-TOKEN"] = csrfToken;
+  }
   const fetchOptions = {
     method: options.method || "POST",
     headers,
@@ -710,7 +713,7 @@ function renderArchives(items) {
 async function loadArchives() {
   setStatus(archiveStatus, t("archive.loading"));
   try {
-    const response = await adminFetch("list_archives");
+    const response = await adminFetch("list_archives", { method: "POST" });
     const data = await response.json();
     const items = Array.isArray(data.archives) ? data.archives : [];
     archiveItems = items;
@@ -730,6 +733,7 @@ async function loadLogs() {
   setStatus(logStatus, t("log.loading"));
   try {
     const response = await adminFetch("list_logs", {
+      method: "POST",
       body: { limit: Number.isFinite(limit) ? limit : 200 },
     });
     const data = await response.json();
@@ -950,7 +954,7 @@ async function loadEventName() {
     setStatus(eventNameStatus, t("event.name.loading"));
   }
   try {
-    const response = await adminFetch("get_event_name");
+    const response = await adminFetch("get_event_name", { method: "GET" });
     const data = await response.json();
     const name = typeof data?.eventName === "string" ? data.eventName : "";
     fillEventName(name);
@@ -1000,7 +1004,7 @@ async function loadSettings() {
   }
   setStatus(settingsStatus, t("settings.loading"));
   try {
-    const response = await adminFetch("get_settings");
+    const response = await adminFetch("get_settings", { method: "GET" });
     const data = await response.json();
     if (data && typeof data === "object") {
       fillSettings(data);

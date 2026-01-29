@@ -28,15 +28,21 @@ $menuManager = new MenuManager(__DIR__ . '/private/menu_categories.json', __DIR_
 $salesManager = new SalesManager($csv_path);
 $layoutManager = new Layout();
 
-$admin_token = $auth->loadAdminToken();
-$action = $_GET['action'] ?? null;
-if ($action !== null) {
-    require_admin_token($admin_token);
+    $admin_token = $auth->loadAdminToken();
+    $action = $_GET['action'] ?? null;
+    if ($action !== null) {
+        $is_get = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET';
+        $provided = $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? ($is_get ? ($_GET['token'] ?? '') : '');
+        
+        if ($admin_token !== '' || $action !== 'set_admin_token') {
+            if ($admin_token === '' || !hash_equals($admin_token, $provided)) {
+                send_json_error(403, 'Invalid admin token', $log_path, 'admin');
+            }
+        }
 
-    // CSRF protection for state-changing actions
-    $is_get = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET';
-    $safe_actions = ['get_access_tokens', 'get_menu', 'get_logs', 'list_archives', 'download_archive'];
-    if (!$is_get && !in_array($action, $safe_actions, true)) {
+        // CSRF protection for state-changing actions
+        $safe_actions = ['get_access_tokens', 'get_menu', 'get_logs', 'list_archives', 'download_archive', 'get_event_name', 'get_settings', 'list_logs'];
+        if (!$is_get && !in_array($action, $safe_actions, true)) {
         $body = read_json_body();
         $csrf_token = $body['csrf_token'] ?? ($_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
         if (!$auth->verifyCsrfToken($csrf_token)) {
@@ -120,7 +126,7 @@ if ($action !== null) {
 
     if ($action === 'get_access_tokens') {
         header('Content-Type: application/json; charset=utf-8');
-        $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
+        $tokens = $auth->loadAccessTokens();
         echo json_encode(['accessTokens' => $tokens]);
         exit;
     }
@@ -128,14 +134,14 @@ if ($action !== null) {
     if ($action === 'add_access_token') {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
-        $name = normalize_access_label((string)($payload['name'] ?? ''), 40);
-        $token = normalize_access_token_value((string)($payload['token'] ?? ''), 160);
+        $name = $auth->normalizeAccessLabel((string)($payload['name'] ?? ''), 40);
+        $token = $auth->normalizeAccessTokenValue((string)($payload['token'] ?? ''), 160);
         $active = (bool)($payload['active'] ?? true);
         if ($name === '' || $token === '') {
             send_json_error(400, 'Missing data', $log_path, "admin:" . ($action ?? "error"));
         }
-        $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
-        $base_id = access_slugify_id($name);
+        $tokens = $auth->loadAccessTokens();
+        $base_id = $auth->slugifyId($name);
         if ($base_id === '') {
             $base_id = 'key';
         }
@@ -152,10 +158,10 @@ if ($action !== null) {
             'token' => $token,
             'active' => $active,
         ];
-        if (!save_access_tokens($access_tokens_path, $tokens)) {
+        if (!$auth->saveAccessTokens($tokens)) {
             send_json_error(500, 'Save failed', $log_path, "admin:" . ($action ?? "error"));
         }
-        log_event($log_path, 'admin:add_access_token', 200, ['id' => $id, 'name' => $name]);
+        $logger->log('admin:add_access_token', 200, ['id' => $id, 'name' => $name]);
         echo json_encode(['ok' => true, 'accessTokens' => $tokens]);
         exit;
     }
@@ -164,13 +170,13 @@ if ($action !== null) {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
         $id = (string)($payload['id'] ?? '');
-        $name = normalize_access_label((string)($payload['name'] ?? ''), 40);
-        $token = normalize_access_token_value((string)($payload['token'] ?? ''), 160);
+        $name = $auth->normalizeAccessLabel((string)($payload['name'] ?? ''), 40);
+        $token = $auth->normalizeAccessTokenValue((string)($payload['token'] ?? ''), 160);
         $active = (bool)($payload['active'] ?? true);
         if ($id === '' || $name === '' || $token === '') {
             send_json_error(400, 'Missing data', $log_path, "admin:" . ($action ?? "error"));
         }
-        $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
+        $tokens = $auth->loadAccessTokens();
         $found = false;
         foreach ($tokens as $index => $entry) {
             if (($entry['id'] ?? '') === $id) {
@@ -184,10 +190,10 @@ if ($action !== null) {
         if (!$found) {
             send_json_error(404, 'Not found', $log_path, "admin:" . ($action ?? "error"));
         }
-        if (!save_access_tokens($access_tokens_path, $tokens)) {
+        if (!$auth->saveAccessTokens($tokens)) {
             send_json_error(500, 'Save failed', $log_path, "admin:" . ($action ?? "error"));
         }
-        log_event($log_path, 'admin:update_access_token', 200, ['id' => $id, 'name' => $name]);
+        $logger->log('admin:update_access_token', 200, ['id' => $id, 'name' => $name]);
         echo json_encode(['ok' => true, 'accessTokens' => $tokens]);
         exit;
     }
@@ -199,7 +205,7 @@ if ($action !== null) {
         if ($id === '') {
             send_json_error(400, 'Missing data', $log_path, "admin:" . ($action ?? "error"));
         }
-        $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
+        $tokens = $auth->loadAccessTokens();
         $next = [];
         $found = false;
         foreach ($tokens as $entry) {
@@ -212,10 +218,10 @@ if ($action !== null) {
         if (!$found) {
             send_json_error(404, 'Not found', $log_path, "admin:" . ($action ?? "error"));
         }
-        if (!save_access_tokens($access_tokens_path, $next)) {
+        if (!$auth->saveAccessTokens($next)) {
             send_json_error(500, 'Save failed', $log_path, "admin:" . ($action ?? "error"));
         }
-        log_event($log_path, 'admin:delete_access_token', 200, ['id' => $id]);
+        $logger->log('admin:delete_access_token', 200, ['id' => $id]);
         echo json_encode(['ok' => true, 'accessTokens' => $next]);
         exit;
     }
@@ -228,14 +234,14 @@ if ($action !== null) {
             send_json_error(400, 'Token missing', $log_path, "admin:" . ($action ?? "error"));
         }
         file_put_contents($admin_token_path, $token, LOCK_EX);
-        log_event($log_path, 'admin:set_admin_token', 200);
+        $logger->log('admin:set_admin_token', 200);
         echo json_encode(['ok' => true]);
         exit;
     }
 
     if ($action === 'get_event_name') {
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['eventName' => load_event_name($event_name_path)]);
+        echo json_encode(['eventName' => $settingsManager->loadEventName($event_name_path)]);
         exit;
     }
 
@@ -243,8 +249,8 @@ if ($action !== null) {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
         $name = (string)($payload['name'] ?? ($_POST['name'] ?? ''));
-        $saved = save_event_name($event_name_path, $name);
-        log_event($log_path, 'admin:set_event_name', 200, ['name' => $saved]);
+        $saved = $settingsManager->saveEventName($event_name_path, $name);
+        $logger->log('admin:set_event_name', 200, ['name' => $saved]);
         echo json_encode(['ok' => true, 'eventName' => $saved]);
         exit;
     }
@@ -252,7 +258,7 @@ if ($action !== null) {
     if ($action === 'download_archive') {
         $payload = read_json_body();
         $name = trim((string)($payload['name'] ?? ($_POST['name'] ?? '')));
-        ensure_archive_dir($archive_dir);
+        Utils::ensureDir($archive_dir);
         $path = resolve_archive_path($archive_dir, $name);
         if ($path === null || !is_file($path)) {
             send_json_error(404, 'Not found', $log_path, "admin:" . ($action ?? "error"));
@@ -268,7 +274,7 @@ if ($action !== null) {
         $payload = read_json_body();
         $name = trim((string)($payload['name'] ?? ($_POST['name'] ?? '')));
         $new_name_raw = (string)($payload['newName'] ?? ($_POST['newName'] ?? ''));
-        ensure_archive_dir($archive_dir);
+        Utils::ensureDir($archive_dir);
         $path = resolve_archive_path($archive_dir, $name);
         if ($path === null || !is_file($path)) {
             send_json_error(404, 'Not found', $log_path, "admin:" . ($action ?? "error"));
@@ -303,7 +309,7 @@ if ($action !== null) {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
         $name = trim((string)($payload['name'] ?? ($_POST['name'] ?? '')));
-        ensure_archive_dir($archive_dir);
+        Utils::ensureDir($archive_dir);
         $path = resolve_archive_path($archive_dir, $name);
         if ($path === null || !is_file($path)) {
             send_json_error(404, 'Not found', $log_path, "admin:" . ($action ?? "error"));
@@ -317,15 +323,15 @@ if ($action !== null) {
 
     if ($action === 'get_settings') {
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(load_settings($settings_path));
+        echo json_encode($settingsManager->getAll());
         exit;
     }
 
     if ($action === 'set_settings') {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
-        $settings = save_settings($settings_path, $payload);
-        log_event($log_path, 'admin:set_settings', 200, ['settings' => $settings]);
+        $settings = $settingsManager->save($payload);
+        $logger->log('admin:set_settings', 200, ['settings' => $settings]);
         echo json_encode(['ok' => true, 'settings' => $settings]);
         exit;
     }
@@ -333,7 +339,7 @@ if ($action !== null) {
     if ($action === 'list_logs') {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
-        $limit = (int)($payload['limit'] ?? 200);
+        $limit = (int)($payload['limit'] ?? ($_GET['limit'] ?? 200));
         if ($limit < 1) {
             $limit = 1;
         }
@@ -373,29 +379,35 @@ if ($action !== null) {
 
     if ($action === 'list_archives') {
         header('Content-Type: application/json; charset=utf-8');
-        ensure_archive_dir($archive_dir);
+        Utils::ensureDir($archive_dir);
         $files = glob($archive_dir . '/*.csv') ?: [];
-        usort($files, fn($a, $b) => filemtime($b) <=> filemtime($a));
-        $items = array_map(function (string $file): array {
-            return [
+        usort($files, function($a, $b) {
+            $ma = @filemtime($a) ?: 0;
+            $mb = @filemtime($b) ?: 0;
+            return $mb <=> $ma;
+        });
+        $items = [];
+        foreach ($files as $file) {
+            if (!is_file($file)) continue;
+            $items[] = [
                 'name' => basename($file),
-                'size' => filesize($file),
-                'modified' => date('c', filemtime($file)),
+                'size' => @filesize($file) ?: 0,
+                'modified' => date('c', @filemtime($file) ?: time()),
             ];
-        }, $files);
+        }
         echo json_encode(['archives' => $items]);
         exit;
     }
 
     if ($action === 'download_latest') {
-        ensure_archive_dir($archive_dir);
+        Utils::ensureDir($archive_dir);
         $files = glob($archive_dir . '/*.csv') ?: [];
         usort($files, fn($a, $b) => filemtime($b) <=> filemtime($a));
         if (!$files) {
             send_json_error(404, 'No archives', $log_path, "admin:" . ($action ?? "error"));
         }
         $file = $files[0];
-        log_event($log_path, 'admin:download_latest', 200, ['name' => basename($file)]);
+        $logger->log('admin:download_latest', 200, ['name' => basename($file)]);
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . basename($file) . '"');
         readfile($file);
@@ -691,13 +703,15 @@ $footer = <<<HTML
 </footer>
 HTML;
 
+$csrf_token_val = $auth->getCsrfToken();
+
 $layoutManager->render([
     'title' => 'Kek-Counter Admin',
     'manifest' => '',
     'header' => $header,
     'content' => $content,
     'footer_extra' => $footer,
-    'header_extra' => '<meta name="robots" content="noindex, nofollow">',
+    'header_extra' => '<meta name="csrf-token" content="' . $csrf_token_val . '"><meta name="robots" content="noindex, nofollow">',
     'scripts' => [
         'assets/admin.js',
     ],

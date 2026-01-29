@@ -86,11 +86,13 @@ async function menuRequest(action, payload) {
 }
 
 async function fetchMenu() {
+  const token = getAdminToken();
   const response = await fetch("menu.php?action=get_menu", {
     method: "POST",
     cache: "no-store",
     headers: {
       "X-Requested-With": "fetch",
+      "X-Admin-Token": token || "",
     },
   });
   const data = await response.json().catch(() => ({}));

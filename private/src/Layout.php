@@ -61,11 +61,11 @@ class Layout
             <script src="<?= htmlspecialchars($chart_js_src) ?>"></script>
             <script src="assets/theme.js"></script>
             <script src="assets/i18n.js"></script>
-            <?php foreach ($scripts as $script): ?>
-                <script src="<?= htmlspecialchars($script) ?>"></script>
-            <?php endforeach; ?>
             <?php foreach ($inline_scripts as $code): ?>
                 <script><?= $code ?></script>
+            <?php endforeach; ?>
+            <?php foreach ($scripts as $script): ?>
+                <script src="<?= htmlspecialchars($script) ?>"></script>
             <?php endforeach; ?>
             <?= $footer_extra ?>
         </body>

@@ -5,8 +5,14 @@ require_once __DIR__ . '/private/bootstrap.php';
 
 use KekCheckout\MenuManager;
 use KekCheckout\Layout;
+use KekCheckout\Auth;
+
+$access_tokens_path = __DIR__ . '/private/access_tokens.json';
+$legacy_access_token_path = __DIR__ . '/private/.access_token';
+$admin_token_path = __DIR__ . '/private/.admin_token';
 
 $menuManager = new MenuManager(__DIR__ . '/private/menu_categories.json', __DIR__ . '/private/menu_items.json');
+$auth = new Auth($access_tokens_path, $legacy_access_token_path, $admin_token_path);
 $layoutManager = new Layout();
 
 $menuManager->ensureSeed();
@@ -151,6 +157,12 @@ HTML;
 $inline_scripts = [
     <<<'JS'
 (() => {
+  window.kekDisableCounter = true;
+})();
+JS
+    ,
+    <<<'JS'
+(() => {
   if (window.kekTheme && typeof window.kekTheme.setAccessibility === 'function') {
     window.kekTheme.setAccessibility(true);
   }
@@ -200,7 +212,172 @@ JS
   }
 })();
 JS
+    ,
+    <<<'JS'
+(() => {
+  const ACCESS_TOKEN_KEY = "kekcounter.accessToken";
+  const ADMIN_TOKEN_KEY = "kekcounter.adminToken";
+  const QUEUE_KEY = "kekcounter.bookingQueue";
+  const stornoButton = document.getElementById("stornoButton");
+
+  function getQueue() {
+    try {
+      return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveQueue(queue) {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+    updateStornoButtonState();
+  }
+
+  function updateStornoButtonState() {
+    if (!stornoButton) return;
+    const queue = getQueue();
+    const isOffline = !navigator.onLine;
+    const hasQueue = queue.length > 0;
+    stornoButton.disabled = isOffline || hasQueue;
+    
+    let title = "";
+    if (isOffline) {
+      title = t("pos.storno.error.offline");
+    } else if (hasQueue) {
+      title = t("pos.storno.error.queueNotEmpty");
+    }
+    stornoButton.title = title;
+  }
+
+  function getTokenHeaders() {
+    const headers = { "X-Requested-With": "fetch" };
+    try {
+      const access = localStorage.getItem(ACCESS_TOKEN_KEY) || "";
+      const admin = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
+      if (access) {
+        headers["X-Access-Token"] = access;
+      } else if (admin) {
+        headers["X-Admin-Token"] = admin;
+      }
+    } catch (error) {
+      return headers;
+    }
+    return headers;
+  }
+
+  let isSyncing = false;
+  async function syncQueue() {
+    if (isSyncing || !navigator.onLine) return;
+    const queue = getQueue();
+    if (queue.length === 0) return;
+
+    isSyncing = true;
+    const remaining = [];
+    for (const item of queue) {
+      try {
+        await postBooking(item.action, item.payload, true);
+      } catch (e) {
+        remaining.push(item);
+      }
+    }
+    saveQueue(remaining);
+    isSyncing = false;
+  }
+
+  async function postBooking(action, payload, isSync = false) {
+    if (!navigator.onLine && !isSync) {
+      const queue = getQueue();
+      queue.push({ action, payload, ts: new Date().toISOString() });
+      saveQueue(queue);
+      if (window.kekErrors?.show) {
+        window.kekErrors.show(t("pos.book.offline"), "info");
+      }
+      return { ok: true, queued: true };
+    }
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    const response = await fetch(`index.php?action=${action}`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-TOKEN": csrfToken || "",
+        ...getTokenHeaders(),
+      },
+      body: JSON.stringify(payload || {}),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.error || t("pos.book.error"));
+    }
+    return data;
+  }
+
+  document.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-book-type]");
+    if (!button) {
+      return;
+    }
+    const productId = button.getAttribute("data-product-id") || "";
+    const type = button.getAttribute("data-book-type") || "";
+    if (!productId || !type) {
+      return;
+    }
+    button.disabled = true;
+    try {
+      const res = await postBooking("book", { productId, type });
+      if (res.ok && !res.queued && window.kekErrors?.show) {
+        window.kekErrors.show(t("pos.book.success"), "success");
+      }
+    } catch (error) {
+      if (window.kekErrors?.show) {
+        window.kekErrors.show(error.message || t("pos.book.error"));
+      } else {
+        alert(error.message || t("pos.book.error"));
+      }
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  if (stornoButton) {
+    stornoButton.addEventListener("click", async () => {
+      const queue = getQueue();
+      if (!navigator.onLine) {
+        return;
+      }
+      if (queue.length > 0) {
+        return;
+      }
+      if (!confirm(t("event.restart.confirm"))) {
+        return;
+      }
+      stornoButton.disabled = true;
+      try {
+        const res = await postBooking("storno", {});
+        if (res.ok && window.kekErrors?.show) {
+          window.kekErrors.show(t("pos.storno.success"), "success");
+        }
+      } catch (error) {
+        if (window.kekErrors?.show) {
+          window.kekErrors.show(error.message || t("pos.storno.error.generic"));
+        } else {
+          alert(error.message || t("pos.storno.error.generic"));
+        }
+      } finally {
+        stornoButton.disabled = false;
+      }
+    });
+  }
+
+  window.addEventListener("online", syncQueue);
+  syncQueue();
+  updateStornoButtonState();
+})();
+JS
 ];
+
+$csrf_token_val = $auth->getCsrfToken();
 
 $layoutManager->render([
     'title' => 'Kek - Checkout Tablet',
@@ -208,6 +385,7 @@ $layoutManager->render([
     'header' => $header,
     'content' => $content,
     'modals' => $modals,
+    'header_extra' => '<meta name="csrf-token" content="' . $csrf_token_val . '">',
     'inline_scripts' => $inline_scripts,
     'scripts' => ['assets/app.js'],
     'include_settings' => false,

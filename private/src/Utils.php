@@ -32,4 +32,11 @@ class Utils
             }
         }
     }
+
+    public static function readJsonBody(): array
+    {
+        $raw = (string)file_get_contents('php://input');
+        $data = json_decode($raw, true);
+        return is_array($data) ? $data : [];
+    }
 }

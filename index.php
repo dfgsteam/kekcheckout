@@ -29,7 +29,7 @@ if ($action === 'book' || $action === 'storno') {
     header('Content-Type: application/json; charset=utf-8');
     $access_tokens = $auth->loadAccessTokens();
     $admin_token = $auth->loadAdminToken();
-    require_any_token($access_tokens, $admin_token);
+    $auth->requireAnyToken($access_tokens, $admin_token);
     $payload = read_json_body();
 
     // CSRF check for state-changing actions
@@ -661,11 +661,13 @@ JS
       return { ok: true, queued: true };
     }
 
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
     const response = await fetch(`?action=${action}`, {
       method: "POST",
       cache: "no-store",
       headers: {
         "Content-Type": "application/json",
+        "X-CSRF-TOKEN": csrfToken || "",
         ...getTokenHeaders(),
       },
       body: JSON.stringify(payload || {}),
@@ -773,12 +775,15 @@ JS
 JS
 ];
 
+$csrf_token_val = $auth->getCsrfToken();
+
 $layoutManager->render([
     'title' => 'Kek - Checkout',
     'description' => 'Checkout Uebersicht und Steuerung.',
     'header' => $header,
     'content' => $content,
     'modals' => $modals,
+    'header_extra' => '<meta name="csrf-token" content="' . $csrf_token_val . '">',
     'inline_scripts' => $inline_scripts,
     'scripts' => ['assets/app.js'],
 ]);

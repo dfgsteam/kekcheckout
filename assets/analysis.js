@@ -404,10 +404,14 @@ async function analysisFetch(action, options = {}) {
   if (!token) {
     throw new Error("Token missing");
   }
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
   const headers = {
     "X-Requested-With": "fetch",
     "X-Admin-Token": token,
   };
+  if (csrfToken) {
+    headers["X-CSRF-TOKEN"] = csrfToken;
+  }
   const fetchOptions = {
     method: options.method || "POST",
     headers,

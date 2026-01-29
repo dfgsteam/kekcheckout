@@ -3,7 +3,7 @@
         "id": "default",
         "name": "Default",
         "token": "test",
-        "active": true
+        "active": false
     },
     {
         "id": "marvin",

@@ -57,13 +57,11 @@ function ensure_archive_dir(string $dir): void
 }
 
 /**
- * Decode the JSON request body into an array.
+ * @deprecated Use KekCheckout\Utils::readJsonBody()
  */
 function read_json_body(): array
 {
-    $raw = (string)file_get_contents('php://input');
-    $data = json_decode($raw, true);
-    return is_array($data) ? $data : [];
+    return Utils::readJsonBody();
 }
 
 /**

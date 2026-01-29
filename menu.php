@@ -33,7 +33,7 @@ $menuManager->ensureSeed();
 $admin_token = $auth->loadAdminToken();
 $action = $_GET['action'] ?? null;
 if ($action !== null) {
-    require_admin_token($admin_token);
+    $auth->requireAdminToken($admin_token);
 
     if ($action === 'restart') {
         header('Content-Type: application/json; charset=utf-8');
@@ -662,15 +662,14 @@ $footer = <<<HTML
 </footer>
 HTML;
 
-render_layout([
+$layoutManager->render([
     'title' => 'Kek-Counter Admin',
-    'title_i18n' => 'title.admin',
     'manifest' => '',
     'header' => $header,
     'content' => $content,
     'modals' => $modals,
-    'footer' => $footer,
-    'head_extra' => '<meta name="robots" content="noindex, nofollow">',
+    'footer_extra' => $footer,
+    'header_extra' => '<meta name="robots" content="noindex, nofollow">',
     'scripts' => [
         'assets/admin.js',
         'assets/menu.js',

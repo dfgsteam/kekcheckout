@@ -8,9 +8,15 @@ require_once __DIR__ . '/private/bootstrap.php';
 use KekCheckout\Settings;
 use KekCheckout\SalesManager;
 use KekCheckout\Layout;
+use KekCheckout\Auth;
+
+$access_tokens_path = __DIR__ . '/private/access_tokens.json';
+$legacy_access_token_path = __DIR__ . '/private/.access_token';
+$admin_token_path = __DIR__ . '/private/.admin_token';
 
 $settingsManager = new Settings(__DIR__ . '/private/settings.json');
 $salesManager = new SalesManager(__DIR__ . '/private/bookings.csv');
+$auth = new Auth($access_tokens_path, $legacy_access_token_path, $admin_token_path);
 $layoutManager = new Layout();
 
 $settings = $settingsManager->getAll();
@@ -439,13 +445,15 @@ $footer = <<<HTML
 </footer>
 HTML;
 
+$csrf_token_val = $auth->getCsrfToken();
+
 $layoutManager->render([
     'title' => 'Kek - Checkout Analyse',
     'description' => 'Analyse fuer den Checkout.',
     'header' => $header,
     'content' => $content,
     'footer_extra' => $footer,
-    'header_extra' => '<meta name="robots" content="noindex, nofollow">',
+    'header_extra' => '<meta name="csrf-token" content="' . $csrf_token_val . '"><meta name="robots" content="noindex, nofollow">',
     'manifest' => '',
     'inline_scripts' => [
         <<<JS

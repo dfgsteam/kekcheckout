@@ -769,7 +769,7 @@ async function fetchData(action, options = {}) {
       headers,
     }, REQUEST_TIMEOUT_MS);
     if (!response.ok) {
-    if (isMutation && response.status === 403) {
+      if (isMutation && response.status === 403) {
         try {
           localStorage.removeItem(ACCESS_TOKEN_KEY);
         } catch (error) {
@@ -786,6 +786,12 @@ async function fetchData(action, options = {}) {
       }
       throw new Error("Request failed");
     }
+
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      return;
+    }
+
     const data = await response.json();
 
     if (isMutation) {

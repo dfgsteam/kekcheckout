@@ -164,4 +164,127 @@ class Auth
         }
         return '';
     }
+
+    public function isSameOrigin(): bool
+    {
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        if ($host === '') {
+            return false;
+        }
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $expected = $scheme . '://' . $host;
+
+        $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+        if ($origin !== '') {
+            return rtrim($origin, '/') === $expected;
+        }
+
+        $referer = $_SERVER['HTTP_REFERER'] ?? '';
+        if ($referer !== '') {
+            $parts = parse_url($referer);
+            if (!is_array($parts)) {
+                return false;
+            }
+            $ref_origin = ($parts['scheme'] ?? '') . '://' . ($parts['host'] ?? '');
+            if (isset($parts['port'])) {
+                $ref_origin .= ':' . $parts['port'];
+            }
+            return $ref_origin === $expected;
+        }
+
+        $requested_with = $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '';
+        return $requested_with === 'fetch';
+    }
+
+    public function authorizeAnyTokenRequest(array $accessTokens, string $adminToken): array
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            return [
+                'ok' => false,
+                'status' => 405,
+                'message' => 'Method not allowed',
+            ];
+        }
+        if (!$this->isSameOrigin()) {
+            return [
+                'ok' => false,
+                'status' => 403,
+                'message' => 'Forbidden (Origin)',
+            ];
+        }
+        $requested_with = $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '';
+        if ($requested_with !== 'fetch') {
+            return [
+                'ok' => false,
+                'status' => 403,
+                'message' => 'Forbidden (Request)',
+            ];
+        }
+        if (empty($accessTokens) && $adminToken === '') {
+            return [
+                'ok' => false,
+                'status' => 503,
+                'message' => 'Token not configured',
+            ];
+        }
+
+        $providedAccess = $_SERVER['HTTP_X_ACCESS_TOKEN'] ?? '';
+        $providedAdmin = $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? '';
+        $bearer = $this->getBearerToken();
+
+        $candidates = array_filter([$providedAccess, $providedAdmin, $bearer], 'strlen');
+        foreach ($candidates as $candidate) {
+            foreach ($accessTokens as $entry) {
+                if (!is_array($entry) || empty($entry['active'])) {
+                    continue;
+                }
+                $token = (string)($entry['token'] ?? '');
+                if ($token !== '' && hash_equals($token, $candidate)) {
+                    return ['ok' => true];
+                }
+            }
+            if ($adminToken !== '' && hash_equals($adminToken, $candidate)) {
+                return ['ok' => true];
+            }
+        }
+
+        return [
+            'ok' => false,
+            'status' => 403,
+            'message' => 'Forbidden (Invalid token)',
+        ];
+    }
+
+    public function requireAnyToken(array $accessTokens, string $adminToken): void
+    {
+        $auth = $this->authorizeAnyTokenRequest($accessTokens, $adminToken);
+        if (!$auth['ok']) {
+            \send_json_error($auth['status'] ?? 403, $auth['message'] ?? 'Forbidden');
+        }
+    }
+
+    public function requireAdminToken(string $adminToken): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            \send_json_error(405, 'Method not allowed');
+        }
+        if (!$this->isSameOrigin()) {
+            \send_json_error(403, 'Forbidden (Origin)');
+        }
+        $requested_with = $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '';
+        if ($requested_with !== 'fetch') {
+            \send_json_error(403, 'Forbidden (Request)');
+        }
+        if ($adminToken === '') {
+            \send_json_error(503, 'Admin token not configured');
+        }
+
+        $provided = $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? '';
+        if ($provided === '') {
+            $provided = $this->getBearerToken();
+        }
+        if ($provided === '' || !hash_equals($adminToken, $provided)) {
+            \send_json_error(403, 'Forbidden (Invalid admin token)');
+        }
+    }
 }
