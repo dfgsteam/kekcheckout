@@ -15,6 +15,24 @@
         "active": true
     },
     {
+        "id": "coladas",
+        "name": "Coladas",
+        "active": true,
+        "parent_id": "cocktails"
+    },
+    {
+        "id": "crustas",
+        "name": "Crustas",
+        "active": true,
+        "parent_id": "cocktails"
+    },
+    {
+        "id": "fizzes",
+        "name": "Fizzes",
+        "active": true,
+        "parent_id": "cocktails"
+    },
+    {
         "id": "longdrink",
         "name": "Longdrink",
         "active": true

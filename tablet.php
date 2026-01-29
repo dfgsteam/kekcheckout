@@ -8,6 +8,7 @@ use KekCheckout\Layout;
 use KekCheckout\Auth;
 use KekCheckout\Settings;
 
+
 $access_tokens_path = __DIR__ . '/private/access_tokens.json';
 $legacy_access_token_path = __DIR__ . '/private/.access_token';
 $admin_token_path = __DIR__ . '/private/.admin_token';
@@ -19,7 +20,7 @@ $auth = new Auth($access_tokens_path, $legacy_access_token_path, $admin_token_pa
 $layoutManager = new Layout();
 
 $menuManager->ensureSeed();
-$categories = $menuManager->buildDisplayCategories();
+$categories = $menuManager->buildGroupedMenu();
 $settings = $settingsManager->getAll();
 
 $csrf_token_val = $auth->getCsrfToken();
@@ -35,6 +36,6 @@ $layoutManager->render([
         "(() => { window.kekTabletSettings = " . json_encode(['typeResetSeconds' => $settings['tablet_type_reset'] ?? 30]) . "; })();"
     ],
     'scripts' => ['assets/app.js', 'assets/pos.js', 'assets/tablet_pos.js'],
-    'main_class' => 'container-fluid py-3 px-3 px-lg-4 tablet-page',
+    'main_class' => 'container-fluid py-2 px-2 tablet-page',
 ]);
 exit;

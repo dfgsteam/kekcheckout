@@ -213,9 +213,14 @@ class SalesManager
             $rows[$foundIndex][$stornoTimeIdx] = date('c');
         }
 
+        $booking = [];
+        foreach ($headers as $idx => $header) {
+            $booking[$header] = $rows[$foundIndex][$idx] ?? '';
+        }
+
         array_unshift($rows, $headers);
         if ($this->writeCsv($rows)) {
-            return ['ok' => true];
+            return ['ok' => true, 'booking' => $booking];
         }
 
         return ['ok' => false, 'error' => 'Save failed'];

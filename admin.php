@@ -440,6 +440,15 @@ $header_actions_html = <<<HTML
   <i class="bi bi-book" aria-hidden="true"></i>
   <span class="btn-icon-text" data-i18n="nav.menu">Menue</span>
 </a>
+<a
+  class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
+  href="/bookings.php"
+  data-i18n-aria-label="nav.bookings"
+  data-i18n-title="nav.bookings"
+>
+  <i class="bi bi-list-ul" aria-hidden="true"></i>
+  <span class="btn-icon-text" data-i18n="nav.bookings">Buchungen</span>
+</a>
 HTML;
 
 $csrf_token_val = $auth->getCsrfToken();

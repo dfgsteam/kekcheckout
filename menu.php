@@ -46,7 +46,8 @@ if ($action !== null) {
         $payload = read_json_body();
         $res = $menuManager->addCategory(
             (string)($payload['name'] ?? ''),
-            (bool)($payload['active'] ?? true)
+            (bool)($payload['active'] ?? true),
+            (string)($payload['parentId'] ?? '')
         );
         if (!$res['ok']) {
             send_json_error(400, $res['error'] ?? 'Save failed', $log_path, 'menu:add_category');
@@ -82,7 +83,8 @@ if ($action !== null) {
         $res = $menuManager->updateCategory(
             (string)($payload['id'] ?? ''),
             (string)($payload['name'] ?? ''),
-            (bool)($payload['active'] ?? true)
+            (bool)($payload['active'] ?? true),
+            (string)($payload['parentId'] ?? '')
         );
         if (!$res['ok']) {
             send_json_error(400, $res['error'] ?? 'Save failed', $log_path, 'menu:update_category');

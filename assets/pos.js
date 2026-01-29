@@ -2,6 +2,34 @@
   const QUEUE_KEY = "kekcounter.bookingQueue";
   const stornoButton = document.getElementById("stornoButton");
   const t = (key, vars) => (typeof window.t === "function" ? window.t(key, vars) : key);
+  const isTablet = document.querySelector(".tablet-page") !== null;
+  const toastId = "tabletToast";
+  let toastTimer = null;
+
+  function showTabletToast(message, tone) {
+    if (!message) return;
+    let toast = document.getElementById(toastId);
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = toastId;
+      toast.className = "tablet-toast";
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.remove("tablet-toast-success", "tablet-toast-error");
+    if (tone === "error") {
+      toast.classList.add("tablet-toast-error");
+    } else {
+      toast.classList.add("tablet-toast-success");
+    }
+    toast.classList.add("tablet-toast-show");
+    if (toastTimer) {
+      clearTimeout(toastTimer);
+    }
+    toastTimer = setTimeout(() => {
+      toast.classList.remove("tablet-toast-show");
+    }, 1200);
+  }
 
   function getQueue() {
     try {
@@ -125,7 +153,9 @@
     try {
       const res = await postBooking("book", { productId, type });
       if (res.ok && !res.queued && window.kekErrors?.show) {
-        window.kekErrors.show(t("pos.book.success"), "success");
+        if (!isTablet) {
+          window.kekErrors.show(t("pos.book.success"), "success");
+        }
       }
     } catch (error) {
       if (window.kekErrors?.show) {
@@ -143,13 +173,18 @@
       const queue = getQueue();
       if (!navigator.onLine || queue.length > 0) return;
       
-      if (!confirm(t("event.restart.confirm"))) return;
+      if (!isTablet && !confirm(t("pos.storno.confirm"))) return;
       
       stornoButton.disabled = true;
       try {
         const res = await postBooking("storno", {});
-        if (res.ok && window.kekErrors?.show) {
-          window.kekErrors.show(t("pos.storno.success"), "success");
+        if (res.ok) {
+          if (isTablet) {
+            const itemName = res?.booking?.produkt_name || "";
+            showTabletToast(itemName || t("pos.storno.success"), "success");
+          } else if (window.kekErrors?.show) {
+            window.kekErrors.show(t("pos.storno.success"), "success");
+          }
         }
       } catch (error) {
         if (window.kekErrors?.show) {

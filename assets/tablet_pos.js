@@ -8,6 +8,7 @@
 
   const voucherBtn = document.getElementById("typeVoucherButton");
   const freeBtn = document.getElementById("typeFreeButton");
+  const stornoBtn = document.getElementById("stornoButton");
   const bookButtons = document.querySelectorAll(".js-tablet-book-btn");
 
   const settings = window.kekTabletSettings || { typeResetSeconds: 30 };
@@ -15,30 +16,45 @@
   function updateActiveState() {
     if (voucherBtn) {
       voucherBtn.classList.toggle("active", currentType === TYPE_VOUCHER);
-      voucherBtn.classList.toggle("btn-primary", currentType === TYPE_VOUCHER);
-      voucherBtn.classList.toggle("btn-outline-primary", currentType !== TYPE_VOUCHER);
     }
     if (freeBtn) {
       freeBtn.classList.toggle("active", currentType === TYPE_FREE);
-      freeBtn.classList.toggle("btn-success", currentType === TYPE_FREE);
-      freeBtn.classList.toggle("btn-outline-success", currentType !== TYPE_FREE);
     }
 
     // Update icons and classes on book buttons
     bookButtons.forEach((btn) => {
       const icon = btn.querySelector(".js-btn-icon");
-      btn.classList.remove("btn-primary", "btn-warning", "btn-success");
+      const categoryColorClass = btn.getAttribute("data-category-color-class") || "";
+      
+      // Remove possible status classes
+      btn.classList.remove("btn-primary", "tablet-btn-voucher", "tablet-btn-free");
+      
+      // Always ensure category color is present
+      if (categoryColorClass) {
+        btn.classList.add(categoryColorClass);
+      } else {
+        btn.classList.add("btn-primary");
+      }
+
       btn.setAttribute("data-book-type", currentType);
 
       if (currentType === TYPE_VOUCHER) {
-        btn.classList.add("btn-warning");
-        if (icon) icon.className = "bi bi-ticket-perforated fs-2 js-btn-icon";
+        btn.classList.add("tablet-btn-voucher");
+        if (icon) {
+          icon.className = "bi bi-ticket-perforated fs-2 js-btn-icon";
+          icon.style.color = "#ff8800";
+        }
       } else if (currentType === TYPE_FREE) {
-        btn.classList.add("btn-success");
-        if (icon) icon.className = "bi bi-gift fs-2 js-btn-icon";
+        btn.classList.add("tablet-btn-free");
+        if (icon) {
+          icon.className = "bi bi-gift fs-2 js-btn-icon";
+          icon.style.color = "#00ff88";
+        }
       } else {
-        btn.classList.add("btn-primary");
-        if (icon) icon.className = "bi bi-cart-plus fs-2 js-btn-icon";
+        if (icon) {
+          icon.style.color = "";
+          icon.className = "bi bi-cart-plus fs-2 js-btn-icon";
+        }
       }
     });
   }
@@ -72,6 +88,16 @@
   }
   if (freeBtn) {
     freeBtn.addEventListener("click", () => setType(TYPE_FREE));
+  }
+  if (stornoBtn) {
+    stornoBtn.addEventListener("click", () => {
+      currentType = TYPE_SELL;
+      updateActiveState();
+      if (resetTimer) {
+        clearTimeout(resetTimer);
+        resetTimer = null;
+      }
+    });
   }
 
   document.addEventListener("click", (e) => {

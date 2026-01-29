@@ -150,7 +150,38 @@ class MenuManager
         ];
     }
 
-    public function addCategory(string $name, bool $active): array
+    public function isCategoryEffectivelyActive(string $id, array $categories): bool
+    {
+        $catMap = [];
+        foreach ($categories as $cat) {
+            if (isset($cat['id'])) {
+                $catMap[(string)$cat['id']] = $cat;
+            }
+        }
+
+        $currentId = $id;
+        $visited = []; // Prevent infinite loops
+        while ($currentId !== '') {
+            if (isset($visited[$currentId])) {
+                return false;
+            }
+            $visited[$currentId] = true;
+
+            if (!isset($catMap[$currentId])) {
+                return false;
+            }
+
+            if (empty($catMap[$currentId]['active'])) {
+                return false;
+            }
+
+            $currentId = (string)($catMap[$currentId]['parent_id'] ?? '');
+        }
+
+        return true;
+    }
+
+    public function addCategory(string $name, bool $active, ?string $parentId = null): array
     {
         $name = $this->normalizeLabel($name, 40);
         if ($name === '') {
@@ -165,11 +196,15 @@ class MenuManager
             $id = $baseId . '-' . $suffix;
             $suffix++;
         }
-        $categories[] = ['id' => $id, 'name' => $name, 'active' => $active];
+        $category = ['id' => $id, 'name' => $name, 'active' => $active];
+        if ($parentId !== null && $parentId !== '') {
+            $category['parent_id'] = $parentId;
+        }
+        $categories[] = $category;
         if (!$this->saveJsonList($this->categoriesPath, $categories)) {
             return ['ok' => false, 'error' => 'Save failed'];
         }
-        return ['ok' => true, 'id' => $id];
+        return ['ok' => true, 'id' => $id, 'category' => $category];
     }
 
     public function addItem(
@@ -210,7 +245,7 @@ class MenuManager
         return ['ok' => true, 'id' => $id];
     }
 
-    public function updateCategory(string $id, string $name, bool $active): array
+    public function updateCategory(string $id, string $name, bool $active, ?string $parentId = null): array
     {
         $name = $this->normalizeLabel($name, 40);
         if ($id === '' || $name === '') {
@@ -222,6 +257,11 @@ class MenuManager
             if ((string)($c['id'] ?? '') === $id) {
                 $c['name'] = $name;
                 $c['active'] = $active;
+                if ($parentId !== null && $parentId !== '' && $parentId !== $id) {
+                    $c['parent_id'] = $parentId;
+                } else {
+                    unset($c['parent_id']);
+                }
                 $found = true;
                 break;
             }
@@ -277,16 +317,33 @@ class MenuManager
             return ['ok' => false, 'error' => 'Missing ID'];
         }
         $categories = $this->loadJsonList($this->categoriesPath);
-        $newCategories = array_filter($categories, fn($c) => (string)($c['id'] ?? '') !== $id);
+        
+        // Find all descendants to delete them as well
+        $idsToDelete = [$id];
+        $toProcess = [$id];
+        while (!empty($toProcess)) {
+            $parentId = array_shift($toProcess);
+            foreach ($categories as $c) {
+                if (($c['parent_id'] ?? '') === $parentId) {
+                    $childId = (string)($c['id'] ?? '');
+                    if ($childId !== '' && !in_array($childId, $idsToDelete, true)) {
+                        $idsToDelete[] = $childId;
+                        $toProcess[] = $childId;
+                    }
+                }
+            }
+        }
+
+        $newCategories = array_filter($categories, fn($c) => !in_array((string)($c['id'] ?? ''), $idsToDelete, true));
         if (count($newCategories) === count($categories)) {
             return ['ok' => false, 'error' => 'Not found'];
         }
         if (!$this->saveJsonList($this->categoriesPath, array_values($newCategories))) {
             return ['ok' => false, 'error' => 'Save failed'];
         }
-        // Also delete items in this category
+        // Also delete items in these categories
         $items = $this->loadJsonList($this->itemsPath);
-        $newItems = array_filter($items, fn($i) => (string)($i['category_id'] ?? '') !== $id);
+        $newItems = array_filter($items, fn($i) => !in_array((string)($i['category_id'] ?? ''), $idsToDelete, true));
         if (count($newItems) !== count($items)) {
             $this->saveJsonList($this->itemsPath, array_values($newItems));
         }
@@ -314,11 +371,8 @@ class MenuManager
         $menu = $this->getMenu();
         $categories = [];
         foreach ($menu['categories'] as $cat) {
-            if (!is_array($cat) || empty($cat['active'])) {
-                continue;
-            }
             $catId = (string)($cat['id'] ?? '');
-            if ($catId === '') {
+            if ($catId === '' || !$this->isCategoryEffectivelyActive($catId, $menu['categories'])) {
                 continue;
             }
             $categories[$catId] = $cat;
@@ -333,6 +387,96 @@ class MenuManager
                 $categories[$catId]['items'][] = $item;
             }
         }
-        return array_values(array_filter($categories, fn($c) => !empty($c['items'])));
+
+        $flat = [];
+        $added = [];
+        $buildFlat = function ($parentId, $parentName) use (&$buildFlat, &$categories, &$flat, &$added) {
+            foreach ($categories as $id => $cat) {
+                if (($cat['parent_id'] ?? '') === $parentId) {
+                    $displayName = $parentName ? $parentName . ' › ' . $cat['name'] : $cat['name'];
+                    $cat['display_name'] = $displayName;
+                    if (!empty($cat['items'])) {
+                        $flat[] = $cat;
+                        $added[] = $id;
+                    }
+                    $buildFlat($id, $displayName);
+                }
+            }
+        };
+
+        $buildFlat('', '');
+
+        // Add orphans
+        foreach ($categories as $id => $cat) {
+            if (!in_array($id, $added, true)) {
+                if (!empty($cat['items'])) {
+                    $cat['display_name'] = $cat['name'];
+                    $flat[] = $cat;
+                }
+            }
+        }
+
+        return $flat;
+    }
+
+    public function buildGroupedMenu(): array
+    {
+        $menu = $this->getMenu();
+        $categories = [];
+        foreach ($menu['categories'] as $cat) {
+            $catId = (string)($cat['id'] ?? '');
+            if ($catId === '' || !$this->isCategoryEffectivelyActive($catId, $menu['categories'])) {
+                continue;
+            }
+            $categories[$catId] = $cat;
+            $categories[$catId]['items'] = [];
+        }
+        foreach ($menu['items'] as $item) {
+            if (!is_array($item) || empty($item['active'])) {
+                continue;
+            }
+            $catId = (string)($item['category_id'] ?? '');
+            if (isset($categories[$catId])) {
+                $categories[$catId]['items'][] = $item;
+            }
+        }
+
+        $roots = [];
+        foreach ($categories as $id => $cat) {
+            if (empty($cat['parent_id'])) {
+                $roots[$id] = $cat;
+                $roots[$id]['groups'] = [];
+                // Add items of root itself if present
+                if (!empty($cat['items'])) {
+                    $roots[$id]['groups'][] = [
+                        'id' => $cat['id'],
+                        'name' => $cat['name'],
+                        'is_root' => true,
+                        'items' => $cat['items']
+                    ];
+                }
+            }
+        }
+
+        // Add subcategories to their roots
+        foreach ($categories as $id => $cat) {
+            if (!empty($cat['parent_id'])) {
+                $rootId = $id;
+                while (!empty($categories[$rootId]['parent_id'])) {
+                    $rootId = $categories[$rootId]['parent_id'];
+                }
+                
+                if (isset($roots[$rootId]) && !empty($cat['items'])) {
+                    $roots[$rootId]['groups'][] = [
+                        'id' => $cat['id'],
+                        'name' => $cat['name'],
+                        'is_root' => false,
+                        'items' => $cat['items']
+                    ];
+                }
+            }
+        }
+
+        return array_values($roots);
     }
 }

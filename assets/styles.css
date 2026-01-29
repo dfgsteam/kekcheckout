@@ -174,7 +174,15 @@ h2,
   overflow: auto;
 }
 
-.analysis-table thead th {
+.bookings-table-wrapper {
+  max-height: 75vh;
+  min-height: 400px;
+  overflow: auto;
+  width: 100%;
+}
+
+.analysis-table thead th,
+.bookings-table-wrapper thead th {
   position: sticky;
   top: 0;
   background: var(--bs-card-bg);
@@ -388,24 +396,73 @@ canvas {
   justify-content: center;
 }
 
-.btn-tablet-header.active {
-  border-width: 4px;
-  box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb), 0.25);
+.btn-tablet-header {
+  border-width: 6px !important;
+  border-style: solid !important;
 }
 
-.btn-tablet-header.active[data-tablet-type="Gutschein"] {
-  background-color: var(--bs-primary);
-  color: #000;
+#typeVoucherButton {
+  background-color: #ff8800 !important;
+  border-color: #ff8800 !important;
+  color: #fff !important;
+}
+#typeVoucherButton.active {
+  background-color: transparent !important;
+  color: #ff8800 !important;
 }
 
-.btn-tablet-header.active[data-tablet-type="Gratis"] {
-  background-color: #198754;
-  color: #fff;
+#typeFreeButton {
+  background-color: #00ff88 !important;
+  border-color: #00ff88 !important;
+  color: #000 !important;
+}
+#typeFreeButton.active {
+  background-color: transparent !important;
+  color: #00ff88 !important;
+}
+
+#stornoButton {
+  background-color: var(--bs-danger) !important;
+  border-color: var(--bs-danger) !important;
+  color: #fff !important;
+}
+#stornoButton:active {
+  background-color: transparent !important;
+  color: var(--bs-danger) !important;
+}
+
+.tablet-page {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.tablet-page .tab-content {
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+}
+
+.tablet-page .tab-pane.active {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+}
+
+.tablet-page .tab-pane .row {
+  flex: 1 1 auto !important;
+  align-content: start !important;
+  height: 100% !important;
 }
 
 .tablet-page .nav-link {
   font-size: 1.5rem;
-  padding: 1rem 1.5rem;
+  padding: 0.5rem 1.5rem;
+}
+
+.tablet-page .nav-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tablet-page .h5,
@@ -418,20 +475,81 @@ canvas {
 }
 
 .tablet-page .js-tablet-book-btn {
-  aspect-ratio: 1 / 1;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   text-align: center;
-  padding: 0.5rem !important;
+  padding: 0.25rem !important;
+  height: 100% !important;
 }
 
 .tablet-page .js-tablet-book-btn .h3 {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   margin: 0;
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: break-word;
+}
+
+.tablet-toast {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(-10px);
+  padding: 0.75rem 1.5rem;
+  border-radius: 999px;
+  color: #fff;
+  background-color: var(--bs-success);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  font-size: 1.25rem;
+  font-weight: 700;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease, transform 150ms ease;
+  z-index: 3000;
+}
+
+.tablet-toast-success {
+  background-color: var(--bs-success);
+}
+
+.tablet-toast-error {
+  background-color: var(--bs-danger);
+}
+
+.tablet-toast-show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.tablet-page footer {
+  display: none !important;
+}
+
+@media (min-width: 992px) {
+  .col-lg-custom-5 {
+    flex: 0 0 auto;
+    width: 20%;
+  }
+  .tablet-page .col-lg-custom-5 {
+    height: 25% !important;
+  }
+}
+
+.category-color-0 { background-color: #ff6384 !important; color: #fff !important; border: none; }
+.category-color-1 { background-color: #36a2eb !important; color: #fff !important; border: none; }
+.category-color-2 { background-color: #ffce56 !important; color: #000 !important; border: none; }
+.category-color-3 { background-color: #4bc0c0 !important; color: #fff !important; border: none; }
+.category-color-4 { background-color: #9966ff !important; color: #fff !important; border: none; }
+.category-color-5 { background-color: #ff9f40 !important; color: #fff !important; border: none; }
+.category-color-6 { background-color: #14b8a6 !important; color: #fff !important; border: none; }
+.category-color-7 { background-color: #ec4899 !important; color: #fff !important; border: none; }
+
+.tablet-btn-voucher {
+  border: 8px solid #ff8800 !important;
+}
+.tablet-btn-free {
+  border: 8px solid #00ff88 !important;
 }

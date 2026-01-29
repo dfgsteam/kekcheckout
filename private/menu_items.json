@@ -121,6 +121,58 @@
         "active": true
     },
     {
+        "id": "pina-colada",
+        "category_id": "coladas",
+        "name": "Piña Colada",
+        "price": "7.50",
+        "ingredients": [
+            "Rum",
+            "Ananassaft",
+            "Kokosnusscreme",
+            "Sahne"
+        ],
+        "tags": [
+            "Rum"
+        ],
+        "preparation": "Im Shaker mit Eis kraeftig schuetteln und in ein Glas mit frischem Eis abseihen",
+        "active": true
+    },
+    {
+        "id": "brandy-crusta",
+        "category_id": "crustas",
+        "name": "Brandy Crusta",
+        "price": "8.00",
+        "ingredients": [
+            "Brandy",
+            "Zitronensaft",
+            "Maraschino",
+            "Zuckersirup",
+            "Angostura Bitter"
+        ],
+        "tags": [
+            "Brandy"
+        ],
+        "preparation": "Im Shaker auf Eis schuetteln und in ein mit Zuckerrand versehenes Glas abseihen",
+        "active": true
+    },
+    {
+        "id": "gin-fizz",
+        "category_id": "fizzes",
+        "name": "Gin Fizz",
+        "price": "7.00",
+        "ingredients": [
+            "Gin",
+            "Zitronensaft",
+            "Zuckersirup",
+            "Soda"
+        ],
+        "tags": [
+            "Gin"
+        ],
+        "preparation": "Zutaten ohne Soda schuetteln, ins Glas abseihen und mit Soda auffuellen",
+        "active": true
+    },
+    {
         "id": "gin-tonic",
         "category_id": "longdrink",
         "name": "Gin Tonic",

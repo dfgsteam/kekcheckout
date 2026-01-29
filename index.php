@@ -79,7 +79,7 @@ if ($action === 'book' || $action === 'storno') {
             send_json_error(404, 'Product not found', $log_path, $action ?? '');
         }
         foreach ($menu['categories'] as $cat) {
-            if (!is_array($cat) || empty($cat['active'])) {
+            if (!$menuManager->isCategoryEffectivelyActive((string)($cat['id'] ?? ''), $menu['categories'])) {
                 continue;
             }
             if ((string)($cat['id'] ?? '') === (string)($product['category_id'] ?? '')) {
@@ -123,7 +123,7 @@ if ($action === 'book' || $action === 'storno') {
             send_json_error(400, $result['error'] ?? 'Storno failed', $log_path, $action ?? '');
         }
         $logger->log('storno', 200, ['user' => (string)$user['id']]);
-        echo json_encode(['ok' => true]);
+        echo json_encode(['ok' => true, 'booking' => $result['booking'] ?? null]);
         exit;
     }
 }
@@ -132,23 +132,31 @@ $categories_path = __DIR__ . '/private/menu_categories.json';
 $items_path = __DIR__ . '/private/menu_items.json';
 
 $menuManager->ensureSeed();
-$categories = $menuManager->buildDisplayCategories();
+$grouped_categories = $menuManager->buildGroupedMenu();
 
 $all_items = [];
-foreach ($categories as $cat) {
-    if (isset($cat['items']) && is_array($cat['items'])) {
-        foreach ($cat['items'] as $item) {
+foreach ($grouped_categories as $root_cat) {
+    foreach ($root_cat['groups'] as $group) {
+        foreach ($group['items'] as $item) {
             $all_items[] = $item;
         }
     }
 }
 usort($all_items, fn($a, $b) => strcasecmp((string)($a['name'] ?? ''), (string)($b['name'] ?? '')));
 
+$categories = $grouped_categories;
 $categories[] = [
     'id' => 'all',
     'name' => 'Alle',
     'name_i18n' => 'pos.tabs.all',
-    'items' => $all_items
+    'groups' => [
+        [
+            'id' => 'all',
+            'name' => 'Alle Produkte',
+            'is_root' => true,
+            'items' => $all_items
+        ]
+    ]
 ];
 
 $header_actions_html = <<<HTML

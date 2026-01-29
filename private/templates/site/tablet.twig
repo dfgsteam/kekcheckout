@@ -1,20 +1,20 @@
-<div class="d-flex align-items-center justify-content-between mb-4 gap-3">
+<div class="d-flex align-items-center justify-content-between mb-2 gap-3">
     <div class="d-flex gap-2">
         <a class="btn btn-lg btn-outline-secondary" href="index.php" title="Zurueck">
             <i class="bi bi-arrow-left"></i>
         </a>
     </div>
 
-    <div class="d-flex justify-content-center gap-3">
-        <button type="button" class="btn btn-lg btn-outline-primary btn-tablet-header js-auth-only d-none" id="typeVoucherButton" data-tablet-type="Gutschein">
+    <div class="d-flex justify-content-center gap-2">
+        <button type="button" class="btn btn-lg btn-primary btn-tablet-header js-auth-only d-none" id="typeVoucherButton" data-tablet-type="Gutschein">
             <i class="bi bi-ticket-perforated me-2" aria-hidden="true"></i>
             <span data-i18n="pos.voucher">Gutschein</span>
         </button>
-        <button type="button" class="btn btn-lg btn-outline-success btn-tablet-header js-auth-only d-none" id="typeFreeButton" data-tablet-type="Gratis">
+        <button type="button" class="btn btn-lg btn-success btn-tablet-header js-auth-only d-none" id="typeFreeButton" data-tablet-type="Gratis">
             <i class="bi bi-gift me-2" aria-hidden="true"></i>
             <span data-i18n="pos.free">Gratis</span>
         </button>
-        <button type="button" class="btn btn-lg btn-outline-danger js-auth-only d-none" id="stornoButton">
+        <button type="button" class="btn btn-lg btn-danger btn-tablet-header js-auth-only d-none" id="stornoButton">
             <i class="bi bi-arrow-counterclockwise me-2" aria-hidden="true"></i>
             <span data-i18n="pos.storno.button">Storno</span>
         </button>
@@ -33,48 +33,34 @@
     </div>
 </div>
 
-<section class="card shadow-sm border-0">
-    <div class="card-body">
-    <ul class="nav nav-tabs" role="tablist">
-      {% for index, category in categories %}
-        {% set is_active = loop.first %}
-        {% set tab_id = 'tab-' ~ category.id %}
-        {% set pane_id = 'pane-' ~ category.id %}
-        <li class="nav-item" role="presentation">
-          <button
-            class="nav-link{{ is_active ? ' active' : '' }}"
-            id="{{ tab_id }}"
-            data-bs-toggle="tab"
-            data-bs-target="#{{ pane_id }}"
-            type="button"
-            role="tab"
-            aria-controls="{{ pane_id }}"
-            aria-selected="{{ is_active ? 'true' : 'false' }}"
-          >{{ category.name|default(category.label|default('')) }}</button>
-        </li>
-      {% endfor %}
-    </ul>
-    <div class="tab-content pt-3">
-      {% for index, category in categories %}
-        {% set is_active = loop.first %}
-        {% set tab_id = 'tab-' ~ category.id %}
-        {% set pane_id = 'pane-' ~ category.id %}
-        <div class="tab-pane fade{{ is_active ? ' show active' : '' }}" id="{{ pane_id }}" role="tabpanel" aria-labelledby="{{ tab_id }}">
-          <div class="row g-3">
-            {% for item in category.items %}
-              <div class="col-6 col-sm-4 col-md-3 col-xl-2">
-                <div class="card border-0 shadow-sm overflow-hidden h-100">
-                  <div class="card-body p-0">
-                    <button type="button" class="btn btn-lg btn-tablet-xl btn-primary js-auth-only d-none w-100 h-100 js-tablet-book-btn" data-book-type="Verkauft" data-product-id="{{ item.id }}">
-                      <div class="h3 mb-0">{{ item.name }}</div>
-                    </button>
-                  </div>
+<ul class="nav nav-tabs flex-nowrap overflow-x-auto mb-2 pb-1" role="tablist" style="-webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none;">
+  {% for index, root_category in categories %}
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {{ loop.first ? 'active' : '' }}" id="tab-{{ root_category.id }}" data-bs-toggle="tab" data-bs-target="#pane-{{ root_category.id }}" type="button" role="tab" aria-controls="pane-{{ root_category.id }}" aria-selected="{{ loop.first ? 'true' : 'false' }}">
+        {{ root_category.name }}
+      </button>
+    </li>
+  {% endfor %}
+</ul>
+
+<div class="tab-content">
+  {% for root_index, root_category in categories %}
+    <div class="tab-pane fade {{ loop.first ? 'show active' : '' }}" id="pane-{{ root_category.id }}" role="tabpanel" aria-labelledby="tab-{{ root_category.id }}">
+      <div class="row g-2">
+        {% for group_index, group in root_category.groups %}
+          {% for item in group.items %}
+            <div class="col-6 col-sm-4 col-md-3 col-lg-custom-5">
+              <div class="card border-0 shadow-sm overflow-hidden h-100">
+                <div class="card-body p-0">
+                  <button type="button" class="btn btn-lg btn-tablet-xl js-auth-only d-none w-100 h-100 js-tablet-book-btn category-color-{{ group_index % 8 }}" data-book-type="Verkauft" data-product-id="{{ item.id }}" data-category-color-class="category-color-{{ group_index % 8 }}">
+                    <div class="h3 mb-0">{{ item.name }}</div>
+                  </button>
                 </div>
               </div>
-            {% endfor %}
-          </div>
-        </div>
-      {% endfor %}
+            </div>
+          {% endfor %}
+        {% endfor %}
+      </div>
     </div>
-    </div>
-</section>
+  {% endfor %}
+</div>
