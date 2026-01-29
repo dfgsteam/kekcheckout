@@ -258,13 +258,13 @@ if ($revenue_chart_json === false) {
 }
 
 $header = <<<HTML
-<header class="d-flex flex-column flex-lg-row justify-content-between align-items-start gap-4 mb-4">
+<header class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-end gap-3 mb-4">
   <div>
     <div class="text-uppercase text-primary small fw-semibold mb-2">Kek - Checkout</div>
     <h1 class="display-6 fw-semibold mb-2">Analyse</h1>
     <p class="text-secondary mb-0">Auswertungen und Trends fuer den Checkout.</p>
   </div>
-  <div class="icon-actions icon-actions--split">
+  <div class="icon-actions">
     <a
       class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
       href="index.php"
@@ -404,8 +404,8 @@ ob_start();
           <?php if ($booking_visible_headers) { ?>
             <thead>
               <tr>
-                <?php foreach ($booking_visible_headers as $header) { ?>
-                  <th scope="col"><?php echo htmlspecialchars((string)$header, ENT_QUOTES, 'UTF-8'); ?></th>
+                <?php foreach ($booking_visible_headers as $col_header) { ?>
+                  <th scope="col"><?php echo htmlspecialchars((string)$col_header, ENT_QUOTES, 'UTF-8'); ?></th>
                 <?php } ?>
               </tr>
             </thead>
