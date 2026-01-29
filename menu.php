@@ -410,8 +410,8 @@ $header = <<<HTML
 <header class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-end gap-3 mb-4">
   <div>
     <div class="text-uppercase text-primary small fw-semibold mb-2">Kek - Checkout</div>
-    <h1 class="display-6 fw-semibold mb-2">Menue</h1>
-    <p class="text-secondary mb-0">Einstellung und Verwaltung.</p>
+    <h1 class="display-6 fw-semibold mb-2">Sortiment</h1>
+    <p class="text-secondary mb-0">Artikel und Kategorien verwalten.</p>
   </div>
   <div class="icon-actions">
     <a
@@ -512,7 +512,8 @@ ob_start();
   <section class="col-12 col-lg-6">
     <div class="card shadow-sm border-0 h-100">
       <div class="card-body">
-        <h2 class="h5 mb-2">Kategorien anlegen</h2>
+        <h2 class="h5 mb-2">Kategorien verwalten</h2>
+        <p class="text-secondary small mb-3">Bereiche fuer das Sortiment anlegen und aktivieren.</p>
 
         <div class="row g-3">
           <div class="col-12 col-lg-6">
@@ -535,52 +536,53 @@ ob_start();
   <section class="col-12 col-lg-6">
     <div class="card shadow-sm border-0 h-100">
       <div class="card-body">
-        <h2 class="h5 mb-2">Artikel verwalten</h2>
-        <p class="text-secondary small mb-3">Kategorien und Artikel anlegen, inkl. Preis und Aktiv-Status.</p>
+        <h2 class="h5 mb-2">Artikel anlegen</h2>
+        <p class="text-secondary small mb-3">Artikel mit Preis, Zutaten und Status pflegen.</p>
         <h3 class="h6 mb-2">Neuer Artikel</h3>
-            <label class="form-label small text-secondary" for="itemCategory">Kategorie</label>
-            <select id="itemCategory" class="form-select">
-              <?php foreach ($menu_categories as $category) {
-                  $cat_id = (string)($category['id'] ?? '');
-                  $cat_name = (string)($category['name'] ?? '');
-                  if ($cat_id === '') {
-                      continue;
-                  }
-                  ?>
-                <option value="<?php echo htmlspecialchars($cat_id, ENT_QUOTES, 'UTF-8'); ?>">
-                  <?php echo htmlspecialchars($cat_name !== '' ? $cat_name : 'Kategorie', ENT_QUOTES, 'UTF-8'); ?>
-                </option>
-              <?php } ?>
-            </select>
-            <label class="form-label small text-secondary mt-2" for="itemName">Name</label>
-            <input id="itemName" class="form-control" type="text" placeholder="z.B. Espresso" autocomplete="off" inputmode="text">
-            <label class="form-label small text-secondary mt-2" for="itemPrice">Preis</label>
-            <input id="itemPrice" class="form-control" type="text" placeholder="2.50" autocomplete="off" inputmode="decimal">
-            <label class="form-label small text-secondary mt-2" for="itemIngredients">Zutaten</label>
-            <input id="itemIngredients" class="form-control" type="text" placeholder="z.B. Limette, Minze, Zucker" autocomplete="off" inputmode="text">
-            <label class="form-label small text-secondary mt-2" for="itemTags">Tags</label>
-            <input id="itemTags" class="form-control" type="text" placeholder="z.B. gin, wodka" autocomplete="off" inputmode="text">
-            <label class="form-label small text-secondary mt-2" for="itemPreparation">Zubereitung</label>
-            <textarea id="itemPreparation" class="form-control" rows="2" placeholder="Kurzbeschreibung der Zubereitung"></textarea>
-            <div class="form-check mt-2">
-              <input id="itemActive" class="form-check-input" type="checkbox" checked>
-              <label class="form-check-label" for="itemActive">Aktiv</label>
-            </div>
-            <div class="d-flex flex-wrap gap-2 mt-3">
-              <button id="itemAdd" class="btn btn-primary btn-sm" type="button">Artikel anlegen</button>
-            </div>
-            <div id="itemStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
+        <label class="form-label small text-secondary" for="itemCategory">Kategorie</label>
+        <select id="itemCategory" class="form-select">
+          <?php foreach ($menu_categories as $category) {
+              $cat_id = (string)($category['id'] ?? '');
+              $cat_name = (string)($category['name'] ?? '');
+              if ($cat_id === '') {
+                  continue;
+              }
+              ?>
+            <option value="<?php echo htmlspecialchars($cat_id, ENT_QUOTES, 'UTF-8'); ?>">
+              <?php echo htmlspecialchars($cat_name !== '' ? $cat_name : 'Kategorie', ENT_QUOTES, 'UTF-8'); ?>
+            </option>
+          <?php } ?>
+        </select>
+        <label class="form-label small text-secondary mt-2" for="itemName">Name</label>
+        <input id="itemName" class="form-control" type="text" placeholder="z.B. Espresso" autocomplete="off" inputmode="text">
+        <label class="form-label small text-secondary mt-2" for="itemPrice">Preis</label>
+        <input id="itemPrice" class="form-control" type="text" placeholder="2.50" autocomplete="off" inputmode="decimal">
+        <label class="form-label small text-secondary mt-2" for="itemIngredients">Zutaten</label>
+        <input id="itemIngredients" class="form-control" type="text" placeholder="z.B. Limette, Minze, Zucker" autocomplete="off" inputmode="text">
+        <label class="form-label small text-secondary mt-2" for="itemTags">Tags</label>
+        <input id="itemTags" class="form-control" type="text" placeholder="z.B. gin, wodka" autocomplete="off" inputmode="text">
+        <label class="form-label small text-secondary mt-2" for="itemPreparation">Zubereitung</label>
+        <textarea id="itemPreparation" class="form-control" rows="2" placeholder="Kurzbeschreibung der Zubereitung"></textarea>
+        <div class="form-check mt-2">
+          <input id="itemActive" class="form-check-input" type="checkbox" checked>
+          <label class="form-check-label" for="itemActive">Aktiv</label>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          <button id="itemAdd" class="btn btn-primary btn-sm" type="button">Artikel anlegen</button>
+        </div>
+        <div id="itemStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
       </div>
     </div>
   </section>
   <section class="col-12">
     <div class="card shadow-sm border-0">
       <div class="card-body">
-        <h2 class="h5 mb-2">Aktuelles Menue</h2>
+        <h2 class="h5 mb-2">Aktuelles Sortiment</h2>
+        <p class="text-secondary small mb-3">Kategorien bearbeiten und Artikel pro Kategorie ausklappen.</p>
         <div id="menuStatus" class="text-secondary small mb-2" role="status" aria-live="polite"></div>
         <div id="menuList" class="d-flex flex-column gap-3">
           <?php if (!$menu_categories) { ?>
-            <div class="text-secondary small">Noch keine Kategorien angelegt.</div>
+            <div class="text-secondary small">Noch keine Kategorien vorhanden.</div>
           <?php } ?>
           <?php foreach ($menu_categories as $category) {
               if (!is_array($category)) {
@@ -589,6 +591,8 @@ ob_start();
               $cat_id = (string)($category['id'] ?? '');
               $cat_name = (string)($category['name'] ?? '');
               $cat_active = !empty($category['active']);
+              $category_items = $items_by_category[$cat_id] ?? [];
+              $category_item_count = is_array($category_items) ? count($category_items) : 0;
               ?>
             <div class="card border-0 shadow-sm" data-category-id="<?php echo htmlspecialchars($cat_id, ENT_QUOTES, 'UTF-8'); ?>">
               <div class="card-body">
@@ -607,59 +611,62 @@ ob_start();
                   <span class="badge <?php echo $cat_active ? 'text-bg-success' : 'text-bg-secondary'; ?> align-self-start">
                     <?php echo $cat_active ? 'Aktiv' : 'Inaktiv'; ?>
                   </span>
+                  <span class="badge text-bg-light text-secondary align-self-start">
+                    <?php echo (int)$category_item_count; ?> Artikel
+                  </span>
                 </div>
-                <?php
-                $category_items = $items_by_category[$cat_id] ?? [];
-                if (!$category_items) {
-                    echo '<div class="text-secondary small">Keine Artikel.</div>';
-                } else {
-                    echo '<div class="d-flex flex-column gap-2">';
-                    foreach ($category_items as $item) {
-                        $item_id = (string)($item['id'] ?? '');
-                        $item_name = (string)($item['name'] ?? '');
-                        $item_price = (string)($item['price'] ?? '0.00');
-                        $item_ingredients = $item['ingredients'] ?? [];
-                        $item_tags = $item['tags'] ?? [];
-                        $item_preparation = (string)($item['preparation'] ?? '');
-                        $item_ingredients_label = is_array($item_ingredients) ? implode(', ', $item_ingredients) : '';
-                        $item_tags_label = is_array($item_tags) ? implode(', ', $item_tags) : '';
-                        $item_active = !empty($item['active']);
-                        ?>
-                      <div class="border rounded px-3 py-2 bg-light" data-item-id="<?php echo htmlspecialchars($item_id, ENT_QUOTES, 'UTF-8'); ?>">
-                        <div class="row g-2 align-items-center">
-                          <div class="col-12 col-md-4">
-                            <label class="form-label small text-secondary">Artikel</label>
-                            <input class="form-control form-control-sm js-item-name" value="<?php echo htmlspecialchars($item_name, ENT_QUOTES, 'UTF-8'); ?>">
-                          </div>
-                          <div class="col-12 col-md-2">
-                            <label class="form-label small text-secondary">Preis</label>
-                            <input class="form-control form-control-sm js-item-price" value="<?php echo htmlspecialchars($item_price, ENT_QUOTES, 'UTF-8'); ?>">
-                          </div>
-                          <div class="col-12 col-md-6">
-                            <label class="form-label small text-secondary">Zutaten</label>
-                            <input class="form-control form-control-sm js-item-ingredients" value="<?php echo htmlspecialchars($item_ingredients_label, ENT_QUOTES, 'UTF-8'); ?>">
-                          </div>
-                          <div class="col-12 col-md-4">
-                            <label class="form-label small text-secondary">Tags</label>
-                            <input class="form-control form-control-sm js-item-tags" value="<?php echo htmlspecialchars($item_tags_label, ENT_QUOTES, 'UTF-8'); ?>">
-                          </div>
-                          <div class="col-12 col-md-8">
-                            <label class="form-label small text-secondary">Zubereitung</label>
-                            <input class="form-control form-control-sm js-item-preparation" value="<?php echo htmlspecialchars($item_preparation, ENT_QUOTES, 'UTF-8'); ?>">
-                          </div>
-                          <div class="col-12 col-md-4 d-flex flex-wrap align-items-center gap-2">
-                            <div class="form-check">
-                              <input class="form-check-input js-item-active" type="checkbox" <?php echo $item_active ? 'checked' : ''; ?>>
-                              <label class="form-check-label">Aktiv</label>
+                <?php if (!$category_items) { ?>
+                  <div class="text-secondary small">Keine Artikel vorhanden.</div>
+                <?php } else { ?>
+                  <details class="mb-0">
+                    <summary class="text-secondary small">Artikel anzeigen</summary>
+                    <div class="d-flex flex-column gap-2 mt-2">
+                      <?php foreach ($category_items as $item) {
+                          $item_id = (string)($item['id'] ?? '');
+                          $item_name = (string)($item['name'] ?? '');
+                          $item_price = (string)($item['price'] ?? '0.00');
+                          $item_ingredients = $item['ingredients'] ?? [];
+                          $item_tags = $item['tags'] ?? [];
+                          $item_preparation = (string)($item['preparation'] ?? '');
+                          $item_ingredients_label = is_array($item_ingredients) ? implode(', ', $item_ingredients) : '';
+                          $item_tags_label = is_array($item_tags) ? implode(', ', $item_tags) : '';
+                          $item_active = !empty($item['active']);
+                          ?>
+                        <div class="border rounded px-3 py-2 bg-light" data-item-id="<?php echo htmlspecialchars($item_id, ENT_QUOTES, 'UTF-8'); ?>">
+                          <div class="row g-2 align-items-center">
+                            <div class="col-12 col-md-4">
+                              <label class="form-label small text-secondary">Artikel</label>
+                              <input class="form-control form-control-sm js-item-name" value="<?php echo htmlspecialchars($item_name, ENT_QUOTES, 'UTF-8'); ?>">
                             </div>
-                            <button type="button" class="btn btn-outline-primary btn-sm" data-action="save-item">Speichern</button>
+                            <div class="col-12 col-md-2">
+                              <label class="form-label small text-secondary">Preis</label>
+                              <input class="form-control form-control-sm js-item-price" value="<?php echo htmlspecialchars($item_price, ENT_QUOTES, 'UTF-8'); ?>">
+                            </div>
+                            <div class="col-12 col-md-6">
+                              <label class="form-label small text-secondary">Zutaten</label>
+                              <input class="form-control form-control-sm js-item-ingredients" value="<?php echo htmlspecialchars($item_ingredients_label, ENT_QUOTES, 'UTF-8'); ?>">
+                            </div>
+                            <div class="col-12 col-md-4">
+                              <label class="form-label small text-secondary">Tags</label>
+                              <input class="form-control form-control-sm js-item-tags" value="<?php echo htmlspecialchars($item_tags_label, ENT_QUOTES, 'UTF-8'); ?>">
+                            </div>
+                            <div class="col-12 col-md-8">
+                              <label class="form-label small text-secondary">Zubereitung</label>
+                              <input class="form-control form-control-sm js-item-preparation" value="<?php echo htmlspecialchars($item_preparation, ENT_QUOTES, 'UTF-8'); ?>">
+                            </div>
+                            <div class="col-12 col-md-4 d-flex flex-wrap align-items-center gap-2">
+                              <div class="form-check">
+                                <input class="form-check-input js-item-active" type="checkbox" <?php echo $item_active ? 'checked' : ''; ?>>
+                                <label class="form-check-label">Aktiv</label>
+                              </div>
+                              <button type="button" class="btn btn-outline-primary btn-sm" data-action="save-item">Speichern</button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    <?php }
-                    echo '</div>';
-                }
-                ?>
+                      <?php } ?>
+                    </div>
+                  </details>
+                <?php } ?>
               </div>
             </div>
           <?php } ?>

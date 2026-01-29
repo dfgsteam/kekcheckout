@@ -117,7 +117,6 @@ render_layout([
 
 ## Wo das Template genutzt wird
 - `index.php`
-- `display.php`
 - `analysis.php`
 - `admin.php`
 

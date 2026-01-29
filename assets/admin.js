@@ -1100,7 +1100,7 @@ function renderAccessTokens(tokens) {
   if (!tokens.length) {
     const empty = document.createElement("div");
     empty.className = "text-secondary small";
-    empty.textContent = "Keine Keys vorhanden.";
+    empty.textContent = t("admin.accessKeys.none");
     accessTokenList.appendChild(empty);
     return;
   }
@@ -1177,16 +1177,16 @@ async function loadAccessTokens() {
   if (!accessTokenList) {
     return;
   }
-  setStatus(accessTokenStatus, "Lade Keys...");
+  setStatus(accessTokenStatus, t("admin.accessKeys.loading"));
   try {
     const response = await adminFetch("get_access_tokens");
     const data = await response.json().catch(() => ({}));
     const tokens = Array.isArray(data.accessTokens) ? data.accessTokens : [];
     renderAccessTokens(tokens);
-    setStatus(accessTokenStatus, "Keys geladen.");
+    setStatus(accessTokenStatus, t("admin.accessKeys.loaded"));
   } catch (error) {
     console.error(error);
-    setStatus(accessTokenStatus, "Laden fehlgeschlagen.", true);
+    setStatus(accessTokenStatus, t("admin.accessKeys.loadFailed"), true);
   }
 }
 
@@ -1195,7 +1195,7 @@ async function addAccessToken(triggerButton) {
   const name = accessTokenNameInput ? accessTokenNameInput.value.trim() : "";
   const token = accessTokenInput ? accessTokenInput.value.trim() : "";
   if (!name || !token) {
-    setStatus(accessTokenStatus, "Name und Key benoetigt.", true);
+    setStatus(accessTokenStatus, t("admin.accessKeys.missing"), true);
     if (!name) {
       accessTokenNameInput?.focus();
     } else {
@@ -1212,7 +1212,7 @@ async function addAccessToken(triggerButton) {
     const data = await response.json().catch(() => ({}));
     const tokens = Array.isArray(data.accessTokens) ? data.accessTokens : [];
     renderAccessTokens(tokens);
-    setStatus(accessTokenStatus, "Key gespeichert.");
+    setStatus(accessTokenStatus, t("admin.accessKeys.saved"));
     if (accessTokenNameInput) {
       accessTokenNameInput.value = "";
     }
@@ -1237,7 +1237,7 @@ async function updateAccessToken(row, triggerButton) {
   const token = tokenInput ? tokenInput.value.trim() : "";
   const active = activeInput ? activeInput.checked : false;
   if (!id || !name || !token) {
-    setStatus(accessTokenStatus, "Name und Key benoetigt.", true);
+    setStatus(accessTokenStatus, t("admin.accessKeys.missing"), true);
     return;
   }
   setStatus(accessTokenStatus, t("common.saving"));
@@ -1249,7 +1249,7 @@ async function updateAccessToken(row, triggerButton) {
     const data = await response.json().catch(() => ({}));
     const tokens = Array.isArray(data.accessTokens) ? data.accessTokens : [];
     renderAccessTokens(tokens);
-    setStatus(accessTokenStatus, "Key gespeichert.");
+    setStatus(accessTokenStatus, t("admin.accessKeys.saved"));
   } catch (error) {
     console.error(error);
     setStatus(accessTokenStatus, t("common.saveFailed"), true);
@@ -1264,7 +1264,7 @@ async function deleteAccessToken(row, triggerButton) {
   if (!id) {
     return;
   }
-  if (!window.confirm("Key wirklich loeschen?")) {
+  if (!window.confirm(t("admin.accessKeys.deleteConfirm"))) {
     return;
   }
   setButtonLoading(triggerButton, true, t("common.loading"));
@@ -1273,7 +1273,7 @@ async function deleteAccessToken(row, triggerButton) {
     const data = await response.json().catch(() => ({}));
     const tokens = Array.isArray(data.accessTokens) ? data.accessTokens : [];
     renderAccessTokens(tokens);
-    setStatus(accessTokenStatus, "Key geloescht.");
+    setStatus(accessTokenStatus, t("admin.accessKeys.deleted"));
   } catch (error) {
     console.error(error);
     setStatus(accessTokenStatus, t("common.saveFailed"), true);

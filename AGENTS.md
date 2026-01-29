@@ -8,7 +8,7 @@ Projekt: Kekcounter (PHP + statische Assets)
 - Keine schweren Frameworks oder Build-Pipelines.
 
 ## Architektur
-- PHP-Seiten: `index.php`, `display.php`, `analysis.php`, `admin.php`.
+- PHP-Seiten: `index.php`, `analysis.php`, `admin.php`.
 - Gemeinsames Layout: `private/layout.php` (render_layout).
 - Styling/Theme: `assets/styles.css`, `assets/theme.js`.
 - I18n: `assets/i18n.js`.

@@ -262,7 +262,7 @@ $header = <<<HTML
   <div>
     <div class="text-uppercase text-primary small fw-semibold mb-2">Kek - Checkout</div>
     <h1 class="display-6 fw-semibold mb-2">Analyse</h1>
-    <p class="text-secondary mb-0">Auswertungen und Trends fuer den Checkout.</p>
+    <p class="text-secondary mb-0">Auswertungen fuer den Kassenbetrieb.</p>
   </div>
   <div class="icon-actions">
     <a
@@ -273,15 +273,6 @@ $header = <<<HTML
     >
       <i class="bi bi-arrow-left" aria-hidden="true"></i>
       <span class="btn-icon-text" data-i18n="nav.back">Zurueck</span>
-    </a>
-    <a
-      class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
-      href="display.php"
-      data-i18n-aria-label="nav.display"
-      data-i18n-title="nav.display"
-    >
-      <i class="bi bi-tv" aria-hidden="true"></i>
-      <span class="btn-icon-text" data-i18n="nav.display">Display</span>
     </a>
     <a
       class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
@@ -357,7 +348,7 @@ ob_start();
   <div class="card-body">
     <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-2 mb-3">
       <div>
-        <h2 class="h5 mb-1">Buchungen pro Kasse</h2>
+        <h2 class="h5 mb-1">Buchungen je Kasse</h2>
         <p class="text-secondary small mb-0">Top 5 Kassen je <?php echo htmlspecialchars((string)$bucket_minutes, ENT_QUOTES, 'UTF-8'); ?> Minuten.</p>
       </div>
     </div>
@@ -376,7 +367,7 @@ ob_start();
   <div class="card-body">
     <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-2 mb-3">
       <div>
-        <h2 class="h5 mb-1">Gesamt Einnahmen</h2>
+        <h2 class="h5 mb-1">Gesamteinnahmen</h2>
         <p class="text-secondary small mb-0">Umsatz je <?php echo htmlspecialchars((string)$bucket_minutes, ENT_QUOTES, 'UTF-8'); ?> Minuten.</p>
       </div>
     </div>

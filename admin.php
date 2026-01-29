@@ -474,7 +474,7 @@ $header = <<<HTML
   <div>
     <div class="text-uppercase text-primary small fw-semibold mb-2">Kek - Checkout</div>
     <h1 class="display-6 fw-semibold mb-2">Admin</h1>
-    <p class="text-secondary mb-0">Konfiguration und Verwaltung.</p>
+    <p class="text-secondary mb-0">Kasse konfigurieren und Auswertungen verwalten.</p>
   </div>
   <div class="icon-actions">
     <a
@@ -499,11 +499,11 @@ $header = <<<HTML
     <a
       class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
       href="/menu.php"
-      data-i18n-aria-label="nav.back"
-      data-i18n-title="nav.back"
+      data-i18n-aria-label="nav.menu"
+      data-i18n-title="nav.menu"
     >
       <i class="bi bi-book" aria-hidden="true"></i>
-      <span class="btn-icon-text" data-i18n="nav.back">Menu</span>
+      <span class="btn-icon-text" data-i18n="nav.menu">Menue</span>
     </a>
     <button
       class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
@@ -609,11 +609,11 @@ ob_start();
             <input id="settingsCapacityDefault" class="form-control" type="number" min="1" step="1">
           </div>
           <div class="col-12 col-md-6">
-            <label class="form-label small text-secondary" for="settingsStornoMinutes">Storno Max Minuten</label>
+            <label class="form-label small text-secondary" for="settingsStornoMinutes" data-i18n="admin.settings.stornoMinutes">Storno Max Minuten</label>
             <input id="settingsStornoMinutes" class="form-control" type="number" min="1" step="1">
           </div>
           <div class="col-12 col-md-6">
-            <label class="form-label small text-secondary" for="settingsStornoBack">Storno Max Rueckwaerts</label>
+            <label class="form-label small text-secondary" for="settingsStornoBack" data-i18n="admin.settings.stornoBack">Storno Max Rueckwaerts</label>
             <input id="settingsStornoBack" class="form-control" type="number" min="1" step="1">
           </div>
         </div>
@@ -632,33 +632,35 @@ ob_start();
       <section class="col-12 mb-lg-3">
         <div class="card shadow-sm border-0 h-100">
           <div class="card-body">
-            <h2 class="h5 mb-2">Access-Keys</h2>
-            <p class="text-secondary small mb-3">Mehrere Kassen-Keys mit Namen anlegen.</p>
-            <label class="form-label small text-secondary" for="accessTokenNameNew">Name</label>
+            <h2 class="h5 mb-2" data-i18n="admin.accessKeys.title">Access-Keys</h2>
+            <p class="text-secondary small mb-3" data-i18n="admin.accessKeys.note">Mehrere Kassen-Keys mit Namen anlegen.</p>
+            <label class="form-label small text-secondary" for="accessTokenNameNew" data-i18n="admin.accessKeys.nameLabel">Name</label>
             <input
               id="accessTokenNameNew"
               class="form-control"
               type="text"
+              data-i18n-placeholder="admin.accessKeys.namePlaceholder"
               placeholder="z.B. Marvin"
               autocomplete="off"
               inputmode="text"
             >
-            <label class="form-label small text-secondary mt-2" for="accessTokenNew">Key</label>
+            <label class="form-label small text-secondary mt-2" for="accessTokenNew" data-i18n="admin.accessKeys.keyLabel">Key</label>
             <input
               id="accessTokenNew"
               class="form-control"
               type="password"
+              data-i18n-placeholder="admin.accessKeys.keyPlaceholder"
               placeholder="Neuer Access-Token"
               autocomplete="off"
               inputmode="text"
             >
             <div class="d-flex flex-wrap gap-2 mt-3">
               <button id="accessTokenAdd" class="btn btn-primary btn-sm" type="button">
-                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i><span>Anlegen</span>
+                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i><span data-i18n="admin.accessKeys.add">Anlegen</span>
               </button>
             </div>
             <div id="accessTokenStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
-            <h3 class="h6 mt-4 mb-2">Vorhandene Keys</h3>
+            <h3 class="h6 mt-4 mb-2" data-i18n="admin.accessKeys.existing">Vorhandene Keys</h3>
             <div id="accessTokenList" class="d-flex flex-column gap-2"></div>
           </div>
         </div>

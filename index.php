@@ -155,7 +155,7 @@ $header = <<<HTML
   <div>
     <div class="text-uppercase text-primary small fw-semibold mb-2">Kek - Checkout</div>
     <h1 class="display-5 fw-semibold mb-2">Produkte</h1>
-    <p class="text-secondary mb-0">Auswahl der Artikel nach Kategorien.</p>
+    <p class="text-secondary mb-0">Artikel nach Kategorien auswaehlen und buchen.</p>
   </div>
   <div class="d-flex flex-column align-items-start align-items-lg-end gap-2">
     <div class="d-flex align-items-center gap-2 small text-secondary border rounded-pill px-3 py-2 bg-white shadow-sm" role="status" aria-live="polite">
@@ -197,20 +197,11 @@ $header = <<<HTML
       <a
         class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
         href="tablet.php"
-        aria-label="Tablet"
-        title="Tablet"
+        data-i18n-aria-label="nav.tablet"
+        data-i18n-title="nav.tablet"
       >
         <i class="bi bi-tablet" aria-hidden="true"></i>
-        <span class="btn-icon-text">Tablet</span>
-      </a>
-      <a
-        class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
-        href="display.php"
-        data-i18n-aria-label="nav.display"
-        data-i18n-title="nav.display"
-      >
-        <i class="bi bi-tv" aria-hidden="true"></i>
-        <span class="btn-icon-text" data-i18n="nav.display">Display</span>
+        <span class="btn-icon-text" data-i18n="nav.tablet">Tablet</span>
       </a>
       <a
         class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
@@ -335,7 +326,7 @@ $modals = <<<HTML
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 class="modal-title fs-5" id="itemInfoTitle">Steckbrief</h2>
+        <h2 class="modal-title fs-5" id="itemInfoTitle">Artikelinfo</h2>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schliessen"></button>
       </div>
       <div class="modal-body">

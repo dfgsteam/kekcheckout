@@ -96,7 +96,9 @@ async function fetchMenu() {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = data?.error || "Request failed";
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
   return data;
 }
@@ -319,7 +321,12 @@ async function loadMenu() {
     populateCategorySelect(menu);
     setStatus(menuStatus, "Menue geladen.");
   } catch (error) {
-    setStatus(menuStatus, error.message || "Menue konnte nicht geladen werden.", true);
+    const status = error?.status || 0;
+    if (status === 403 && menuList && menuList.children.length > 0) {
+      setStatus(menuStatus, "Menue angezeigt.");
+      return;
+    }
+    setStatus(menuStatus, error?.message || "Menue konnte nicht geladen werden.", true);
   }
 }
 
