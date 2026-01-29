@@ -44,6 +44,8 @@ const settingsChartMaxPoints = document.getElementById("settingsChartMaxPoints")
 const settingsWindowHours = document.getElementById("settingsWindowHours");
 const settingsTickMinutes = document.getElementById("settingsTickMinutes");
 const settingsCapacityDefault = document.getElementById("settingsCapacityDefault");
+const settingsStornoMinutes = document.getElementById("settingsStornoMinutes");
+const settingsStornoBack = document.getElementById("settingsStornoBack");
 const settingsSave = document.getElementById("settingsSave");
 const settingsStatus = document.getElementById("settingsStatus");
 const toastContainer = document.getElementById("toastContainer");
@@ -924,6 +926,12 @@ function fillSettings(settings) {
   if (settingsCapacityDefault) {
     settingsCapacityDefault.value = settings.capacity_default ?? "";
   }
+  if (settingsStornoMinutes) {
+    settingsStornoMinutes.value = settings.storno_max_minutes ?? "";
+  }
+  if (settingsStornoBack) {
+    settingsStornoBack.value = settings.storno_max_back ?? "";
+  }
 }
 
 /** Fill the event name input field. */
@@ -1018,6 +1026,8 @@ async function saveSettings(triggerButton) {
     window_hours: readSetting(settingsWindowHours),
     tick_minutes: readSetting(settingsTickMinutes),
     capacity_default: readSetting(settingsCapacityDefault),
+    storno_max_minutes: readSetting(settingsStornoMinutes),
+    storno_max_back: readSetting(settingsStornoBack),
   };
 
   if (
@@ -1026,7 +1036,9 @@ async function saveSettings(triggerButton) {
     payload.chart_max_points === null ||
     payload.window_hours === null ||
     payload.tick_minutes === null ||
-    payload.capacity_default === null
+    payload.capacity_default === null ||
+    payload.storno_max_minutes === null ||
+    payload.storno_max_back === null
   ) {
     setStatus(settingsStatus, t("settings.fillAll"), true);
     return;
@@ -1373,6 +1385,12 @@ if (adminClear) {
     if (settingsCapacityDefault) {
       settingsCapacityDefault.value = "";
     }
+    if (settingsStornoMinutes) {
+      settingsStornoMinutes.value = "";
+    }
+    if (settingsStornoBack) {
+      settingsStornoBack.value = "";
+    }
     if (eventNameInput) {
       eventNameInput.value = "";
     }
@@ -1540,6 +1558,8 @@ const settingsInputs = [
   settingsWindowHours,
   settingsTickMinutes,
   settingsCapacityDefault,
+  settingsStornoMinutes,
+  settingsStornoBack,
 ];
 settingsInputs.forEach((input) => {
   if (!input) {

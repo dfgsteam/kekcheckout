@@ -1,0 +1,13 @@
+id,uhrzeit,user_id,user_name,produkt_id,produkt_name,kategorie_id,kategorie_name,preis,buchungstyp,einnahmen,status,storno_reason,storno_at
+2d4e3e81765ac118,2026-01-29T00:03:32+00:00,marvin,marvin,cola,Cola,softdrinks,Softdrinks,2.00,Verkauft,2.00,OK,,
+fc16898330ae2f05,2026-01-29T00:03:36+00:00,marvin,marvin,cola,Cola,softdrinks,Softdrinks,2.00,Gutschein,0.00,OK,,
+5c3567d62d087a3d,2026-01-29T00:03:36+00:00,marvin,marvin,cola,Cola,softdrinks,Softdrinks,2.00,Gutschein,0.00,OK,,
+31c6c90d8c086b28,2026-01-29T00:03:37+00:00,marvin,marvin,cola-zero,"Cola Zero",softdrinks,Softdrinks,2.00,Verkauft,2.00,OK,,
+68f605dadee18791,2026-01-29T00:03:39+00:00,marvin,marvin,cola-zero,"Cola Zero",softdrinks,Softdrinks,2.00,Freigetraenk,0.00,STORNO,,2026-01-29T00:03:40+00:00
+4344015c1fd85672,2026-01-29T00:04:06+00:00,marvin,marvin,limonade,Limonade,softdrinks,Softdrinks,2.20,Verkauft,0.00,STORNO,,2026-01-29T00:04:07+00:00
+5c258ae0289c9b7e,2026-01-29T00:04:16+00:00,marvin,marvin,limonade,Limonade,softdrinks,Softdrinks,2.20,Verkauft,0.00,STORNO,,2026-01-29T00:04:21+00:00
+589f5dbe094d358b,2026-01-29T00:04:47+00:00,marvin,marvin,limonade,Limonade,softdrinks,Softdrinks,2.20,Verkauft,2.20,OK,,
+5dcc306acb0b97f7,2026-01-29T00:04:47+00:00,marvin,marvin,limonade,Limonade,softdrinks,Softdrinks,2.20,Verkauft,2.20,OK,,
+9f89e15182a06a22,2026-01-29T00:04:48+00:00,marvin,marvin,limonade,Limonade,softdrinks,Softdrinks,2.20,Verkauft,2.20,OK,,
+b4a98ea0123ffad1,2026-01-29T00:04:48+00:00,marvin,marvin,limonade,Limonade,softdrinks,Softdrinks,2.20,Verkauft,0.00,STORNO,,2026-01-29T00:04:56+00:00
+210103018a91a583,2026-01-29T00:04:49+00:00,marvin,marvin,limonade,Limonade,softdrinks,Softdrinks,2.20,Verkauft,0.00,STORNO,,2026-01-29T00:04:52+00:00

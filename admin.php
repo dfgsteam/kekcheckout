@@ -26,6 +26,8 @@ function save_settings(string $path, array $payload): array
         'window_hours' => 3,
         'tick_minutes' => 15,
         'capacity_default' => 150,
+        'storno_max_minutes' => 3,
+        'storno_max_back' => 5,
     ];
 
     $settings = $defaults;
@@ -605,6 +607,14 @@ ob_start();
           <div class="col-12 col-md-6">
             <label class="form-label small text-secondary" for="settingsCapacityDefault" data-i18n="admin.settings.capacityDefault">Kapazitaet (Default)</label>
             <input id="settingsCapacityDefault" class="form-control" type="number" min="1" step="1">
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label small text-secondary" for="settingsStornoMinutes">Storno Max Minuten</label>
+            <input id="settingsStornoMinutes" class="form-control" type="number" min="1" step="1">
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label small text-secondary" for="settingsStornoBack">Storno Max Rueckwaerts</label>
+            <input id="settingsStornoBack" class="form-control" type="number" min="1" step="1">
           </div>
         </div>
         <div class="d-flex flex-wrap gap-2 mt-3">

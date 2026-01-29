@@ -3,107 +3,295 @@ declare(strict_types=1);
 
 date_default_timezone_set('Europe/Berlin');
 
-$archive_dir = __DIR__ . '/archives';
-$access_token_path = __DIR__ . '/private/.access_token';
-$admin_token_path = __DIR__ . '/private/.admin_token';
-$settings_path = __DIR__ . '/private/settings.json';
-$event_name_path = __DIR__ . '/private/.event_name';
-require_once __DIR__ . '/private/bootstrap.php';
-require_once __DIR__ . '/private/auth.php';
-
-$access_token = load_token('KEKCOUNTER_ACCESS_TOKEN', $access_token_path);
-$admin_token = load_token('KEKCOUNTER_ADMIN_TOKEN', $admin_token_path);
-$settings = load_settings($settings_path);
-$event_name = load_event_name($event_name_path);
-$action = $_GET['action'] ?? null;
-if ($action !== null) {
-    require_any_token($access_token, $admin_token);
-    ensure_archive_dir($archive_dir);
-
-    if ($action === 'list_archives') {
-        header('Content-Type: application/json; charset=utf-8');
-        $files = glob($archive_dir . '/*.csv') ?: [];
-        usort($files, fn($a, $b) => filemtime($b) <=> filemtime($a));
-        $items = array_map(function (string $file): array {
-            return [
-                'name' => basename($file),
-                'size' => filesize($file),
-                'modified' => date('c', filemtime($file)),
-            ];
-        }, $files);
-        echo json_encode(['archives' => $items]);
-        exit;
-    }
-
-    if ($action === 'download') {
-        $payload = read_json_body();
-        $name = trim((string)($payload['name'] ?? ($_POST['name'] ?? '')));
-        $path = resolve_archive_path($archive_dir, $name);
-        if ($path === null || !is_file($path)) {
-            send_json_error(404, 'Not found');
-        }
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename="' . basename($path) . '"');
-        readfile($path);
-        exit;
-    }
-
-    if ($action === 'read') {
-        $payload = read_json_body();
-        $name = trim((string)($payload['name'] ?? ($_POST['name'] ?? '')));
-        $path = resolve_archive_path($archive_dir, $name);
-        if ($path === null || !is_file($path)) {
-            send_json_error(404, 'Not found');
-        }
-        header('Content-Type: text/csv; charset=utf-8');
-        readfile($path);
-        exit;
-    }
-
-    send_json_error(400, 'Unknown action');
-}
-?>
-<?php
 require_once __DIR__ . '/private/layout.php';
+require_once __DIR__ . '/private/sales_lib.php';
+require_once __DIR__ . '/private/bootstrap.php';
 
-ob_start();
-?>
-<header class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-end gap-3 mb-4">
+$booking_path = __DIR__ . '/private/bookings.csv';
+$settings_path = __DIR__ . '/private/settings.json';
+$settings = load_settings($settings_path);
+$bucket_minutes = (int)($settings['tick_minutes'] ?? 15);
+if ($bucket_minutes <= 0) {
+    $bucket_minutes = 15;
+}
+$chart_max_points = (int)($settings['chart_max_points'] ?? 2000);
+if ($chart_max_points <= 0) {
+    $chart_max_points = 2000;
+}
+$booking_rows = [];
+$booking_headers = [];
+$booking_truncated = false;
+$booking_limit = 200;
+$booking_stats = [
+    'revenue' => 0.0,
+    'count' => 0,
+    'average' => 0.0,
+];
+$booking_hide_cols = ['user_id', 'produkt_id', 'kategorie_id'];
+$booking_visible_headers = [];
+$booking_visible_rows = [];
+$sales_labels = [];
+$sales_series = [
+    'Verkauft' => [],
+    'Gutschein' => [],
+    'Freigetraenk' => [],
+    'Storno' => [],
+];
+$cashier_labels = [];
+$cashier_series = [];
+$cashier_totals = [];
+$revenue_labels = [];
+$revenue_series = [];
+
+if (is_file($booking_path)) {
+    $rows = sales_read_csv($booking_path);
+    if ($rows) {
+        $headers = array_shift($rows);
+        if (is_array($headers)) {
+            $booking_headers = $headers;
+        }
+        $index_map = $booking_headers ? array_flip($booking_headers) : [];
+        $earnings_col = $index_map['einnahmen'] ?? null;
+        $status_col = $index_map['status'] ?? null;
+        $type_col = $index_map['buchungstyp'] ?? null;
+        $time_col = $index_map['uhrzeit'] ?? null;
+        $user_col = $index_map['user_name'] ?? ($index_map['user_id'] ?? null);
+        $tz = new DateTimeZone(date_default_timezone_get());
+        $sales_buckets = [];
+        $cashier_buckets = [];
+        $revenue_buckets = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $status = $status_col !== null ? (string)($row[$status_col] ?? '') : 'OK';
+            if ($status !== 'STORNO') {
+                $booking_stats['count']++;
+                if ($earnings_col !== null) {
+                    $raw = str_replace(',', '.', (string)($row[$earnings_col] ?? '0'));
+                    $value = (float)$raw;
+                    if ($value > 0) {
+                        $booking_stats['revenue'] += $value;
+                    }
+                }
+            }
+            if ($time_col !== null) {
+                $raw_time = (string)($row[$time_col] ?? '');
+                if ($raw_time !== '') {
+                    try {
+                        $dt = new DateTimeImmutable($raw_time);
+                        $dt = $dt->setTimezone($tz);
+                        $hour = (int)$dt->format('H');
+                        $minute = (int)$dt->format('i');
+                        $bucket = intdiv($minute, $bucket_minutes) * $bucket_minutes;
+                        $bucket_dt = $dt->setTime($hour, $bucket, 0);
+                        $bucket_key = $bucket_dt->format('Y-m-d H:i');
+                        if (!isset($sales_buckets[$bucket_key])) {
+                            $sales_buckets[$bucket_key] = [
+                                'Verkauft' => 0,
+                                'Gutschein' => 0,
+                                'Freigetraenk' => 0,
+                                'Storno' => 0,
+                            ];
+                        }
+                        if ($status === 'STORNO') {
+                            $sales_buckets[$bucket_key]['Storno']++;
+                        } else {
+                            $type = $type_col !== null ? (string)($row[$type_col] ?? '') : '';
+                            if (!isset($sales_buckets[$bucket_key][$type])) {
+                                $type = 'Verkauft';
+                            }
+                            $sales_buckets[$bucket_key][$type]++;
+                        }
+                        if (!isset($revenue_buckets[$bucket_key])) {
+                            $revenue_buckets[$bucket_key] = 0.0;
+                        }
+                        if ($status !== 'STORNO' && $earnings_col !== null) {
+                            $raw_earnings = str_replace(',', '.', (string)($row[$earnings_col] ?? '0'));
+                            $revenue_buckets[$bucket_key] += (float)$raw_earnings;
+                        }
+
+                        if ($user_col !== null) {
+                            $user = trim((string)($row[$user_col] ?? ''));
+                            if ($user === '') {
+                                $user = 'Unbekannt';
+                            }
+                            if (!isset($cashier_buckets[$bucket_key])) {
+                                $cashier_buckets[$bucket_key] = [];
+                            }
+                            if (!isset($cashier_buckets[$bucket_key][$user])) {
+                                $cashier_buckets[$bucket_key][$user] = 0;
+                            }
+                            $cashier_buckets[$bucket_key][$user]++;
+                            if (!isset($cashier_totals[$user])) {
+                                $cashier_totals[$user] = 0;
+                            }
+                            $cashier_totals[$user]++;
+                        }
+                    } catch (Exception $e) {
+                    }
+                }
+            }
+        }
+        if ($booking_stats['count'] > 0) {
+            $booking_stats['average'] = $booking_stats['revenue'] / $booking_stats['count'];
+        }
+        if (count($rows) > $booking_limit) {
+            $booking_rows = array_slice($rows, -$booking_limit);
+            $booking_truncated = true;
+        } else {
+            $booking_rows = $rows;
+        }
+        if (!empty($sales_buckets)) {
+            ksort($sales_buckets);
+            $bucket_keys = array_keys($sales_buckets);
+            if (count($bucket_keys) > $chart_max_points) {
+                $bucket_keys = array_slice($bucket_keys, -$chart_max_points);
+            }
+            foreach ($bucket_keys as $bucket_key) {
+                $sales_labels[] = $bucket_key;
+                $bucket = $sales_buckets[$bucket_key];
+                $sales_series['Verkauft'][] = (int)($bucket['Verkauft'] ?? 0);
+                $sales_series['Gutschein'][] = (int)($bucket['Gutschein'] ?? 0);
+                $sales_series['Freigetraenk'][] = (int)($bucket['Freigetraenk'] ?? 0);
+                $sales_series['Storno'][] = (int)($bucket['Storno'] ?? 0);
+            }
+        }
+        if (!empty($cashier_buckets)) {
+            arsort($cashier_totals);
+            $top_users = array_slice(array_keys($cashier_totals), 0, 5);
+            $include_others = count($cashier_totals) > count($top_users);
+            ksort($cashier_buckets);
+            $bucket_keys = array_keys($cashier_buckets);
+            if (count($bucket_keys) > $chart_max_points) {
+                $bucket_keys = array_slice($bucket_keys, -$chart_max_points);
+            }
+            $cashier_labels = $bucket_keys;
+            foreach ($top_users as $user) {
+                $cashier_series[$user] = [];
+            }
+            if ($include_others) {
+                $cashier_series['Andere'] = [];
+            }
+            foreach ($bucket_keys as $bucket_key) {
+                $bucket = $cashier_buckets[$bucket_key] ?? [];
+                foreach ($top_users as $user) {
+                    $cashier_series[$user][] = (int)($bucket[$user] ?? 0);
+                }
+                if ($include_others) {
+                    $other_count = 0;
+                    foreach ($bucket as $user => $count) {
+                        if (!in_array($user, $top_users, true)) {
+                            $other_count += (int)$count;
+                        }
+                    }
+                    $cashier_series['Andere'][] = $other_count;
+                }
+            }
+        }
+        if (!empty($revenue_buckets)) {
+            ksort($revenue_buckets);
+            $bucket_keys = array_keys($revenue_buckets);
+            if (count($bucket_keys) > $chart_max_points) {
+                $bucket_keys = array_slice($bucket_keys, -$chart_max_points);
+            }
+            $revenue_labels = $bucket_keys;
+            foreach ($bucket_keys as $bucket_key) {
+                $revenue_series[] = round((float)($revenue_buckets[$bucket_key] ?? 0.0), 2);
+            }
+        }
+    }
+}
+
+if ($booking_headers) {
+    $visible_indexes = [];
+    foreach ($booking_headers as $index => $label) {
+        if (in_array((string)$label, $booking_hide_cols, true)) {
+            continue;
+        }
+        $visible_indexes[] = $index;
+        $booking_visible_headers[] = (string)$label;
+    }
+    foreach ($booking_rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $visible_row = [];
+        foreach ($visible_indexes as $index) {
+            $visible_row[] = (string)($row[$index] ?? '');
+        }
+        $booking_visible_rows[] = $visible_row;
+    }
+} else {
+    $booking_visible_rows = $booking_rows;
+}
+
+$revenue_formatted = number_format($booking_stats['revenue'], 2, '.', '');
+$count_formatted = number_format($booking_stats['count'], 0, '.', '');
+$average_formatted = number_format($booking_stats['average'], 2, '.', '');
+$sales_chart_payload = [
+    'labels' => $sales_labels,
+    'series' => $sales_series,
+    'bucketMinutes' => $bucket_minutes,
+];
+$sales_chart_json = json_encode($sales_chart_payload, JSON_UNESCAPED_SLASHES);
+if ($sales_chart_json === false) {
+    $sales_chart_json = 'null';
+}
+$cashier_chart_payload = [
+    'labels' => $cashier_labels,
+    'series' => $cashier_series,
+    'bucketMinutes' => $bucket_minutes,
+];
+$cashier_chart_json = json_encode($cashier_chart_payload, JSON_UNESCAPED_SLASHES);
+if ($cashier_chart_json === false) {
+    $cashier_chart_json = 'null';
+}
+$revenue_chart_payload = [
+    'labels' => $revenue_labels,
+    'series' => $revenue_series,
+    'bucketMinutes' => $bucket_minutes,
+];
+$revenue_chart_json = json_encode($revenue_chart_payload, JSON_UNESCAPED_SLASHES);
+if ($revenue_chart_json === false) {
+    $revenue_chart_json = 'null';
+}
+
+$header = <<<HTML
+<header class="d-flex flex-column flex-lg-row justify-content-between align-items-start gap-4 mb-4">
   <div>
-    <div class="text-uppercase text-primary small fw-semibold mb-2" data-i18n="analysis.tagline">Analyse</div>
-    <h1 class="display-6 fw-semibold mb-2" data-i18n="analysis.title">Kek-Counter Analyse</h1>
-    <p class="text-secondary mb-0" data-i18n="analysis.subtitle">Archivierte Veranstaltungen durchsuchen.</p>
-    <div class="d-flex align-items-center gap-2 small text-secondary mt-2">
-      <i class="bi bi-calendar-event" aria-hidden="true"></i>
-      <span class="text-uppercase text-secondary" data-i18n="event.active">Aktiv</span>
-      <span
-        class="text-body fw-semibold"
-        <?php if ($event_name === '') { ?>data-i18n="event.unnamed"<?php } ?>
-      >
-        <?php echo htmlspecialchars($event_name !== '' ? $event_name : 'Unbenannt', ENT_QUOTES, 'UTF-8'); ?>
-      </span>
-    </div>
+    <div class="text-uppercase text-primary small fw-semibold mb-2">Kek - Checkout</div>
+    <h1 class="display-6 fw-semibold mb-2">Analyse</h1>
+    <p class="text-secondary mb-0">Auswertungen und Trends fuer den Checkout.</p>
   </div>
   <div class="icon-actions">
     <a
       class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
-      href="/"
+      href="index.php"
       data-i18n-aria-label="nav.back"
       data-i18n-title="nav.back"
     >
       <i class="bi bi-arrow-left" aria-hidden="true"></i>
       <span class="btn-icon-text" data-i18n="nav.back">Zurueck</span>
     </a>
-    <button
-      id="analysisLogout"
-      class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary d-none"
-      type="button"
-      data-i18n-aria-label="nav.logout"
-      data-i18n-title="nav.logout"
+    <a
+      class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
+      href="display.php"
+      data-i18n-aria-label="nav.display"
+      data-i18n-title="nav.display"
     >
-      <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
-      <span class="btn-icon-text" data-i18n="nav.logout">Abmelden</span>
-    </button>
+      <i class="bi bi-tv" aria-hidden="true"></i>
+      <span class="btn-icon-text" data-i18n="nav.display">Display</span>
+    </a>
+    <a
+      class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
+      href="admin.php"
+      data-i18n-aria-label="nav.admin"
+      data-i18n-title="nav.admin"
+    >
+      <i class="bi bi-person" aria-hidden="true"></i>
+      <span class="btn-icon-text" data-i18n="nav.admin">Admin</span>
+    </a>
     <button
       class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
       type="button"
@@ -116,193 +304,434 @@ ob_start();
     </button>
   </div>
 </header>
-<?php
-$header = ob_get_clean();
+HTML;
 
 ob_start();
 ?>
-<section id="analysisAuthCard" class="card shadow-sm border-0 mb-3">
+<section class="card shadow-sm border-0 mb-4">
   <div class="card-body">
-    <h2 class="h5 mb-2" data-i18n="analysis.auth.title">Zugriff</h2>
-    <p class="text-secondary small mb-3" data-i18n="analysis.auth.note">Admin-Token eingeben.</p>
-    <input
-      id="analysisToken"
-      class="form-control"
-      type="password"
-      data-i18n-placeholder="analysis.auth.placeholder"
-      placeholder="Admin-Token"
-      autocomplete="off"
-      inputmode="text"
-    >
-    <div class="d-flex flex-wrap gap-2 mt-3">
-      <button id="analysisSave" class="btn btn-primary btn-sm" type="button">
-        <i class="bi bi-floppy me-1" aria-hidden="true"></i><span data-i18n="common.save">Speichern</span>
-      </button>
-      <button id="analysisClear" class="btn btn-outline-danger btn-sm" type="button">
-        <i class="bi bi-x-circle me-1" aria-hidden="true"></i><span data-i18n="common.forget">Vergessen</span>
-      </button>
-    </div>
-    <div id="analysisStatus" class="text-secondary small mt-2" role="status" aria-live="polite" data-i18n="analysis.auth.status.none">Kein Admin-Token gespeichert</div>
-  </div>
-</section>
-
-<div id="analysisContent" class="row g-3 d-none">
-  <section class="col-12">
-    <div class="d-grid gap-3">
-      <div class="card shadow-sm border-0 h-100 analysis-card analysis-card--archives">
-        <div class="card-body">
-          <h2 class="h5 mb-2" data-i18n="analysis.archive.title">Archivierte Veranstaltungen</h2>
-          <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-            <button id="analysisRefresh" class="btn btn-outline-secondary btn-sm" type="button">
-              <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i><span data-i18n="common.listRefresh">Liste aktualisieren</span>
-            </button>
-            <div class="input-group input-group-sm archive-search">
-              <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
-              <input
-                id="analysisArchiveSearch"
-                class="form-control"
-                type="search"
-                data-i18n-placeholder="archive.searchPlaceholder"
-                data-i18n-aria-label="archive.searchPlaceholder"
-                placeholder="Archiv suchen"
-                aria-label="Archiv suchen"
-                autocomplete="off"
-              >
-            </div>
-            <select id="analysisArchiveSort" class="form-select form-select-sm w-auto" data-i18n-aria-label="archive.sort.label" aria-label="Archiv sortieren">
-              <option value="modified_desc" selected data-i18n="archive.sort.modifiedDesc">Neueste zuerst</option>
-              <option value="modified_asc" data-i18n="archive.sort.modifiedAsc">Aelteste zuerst</option>
-              <option value="name_asc" data-i18n="archive.sort.nameAsc">Name A-Z</option>
-              <option value="name_desc" data-i18n="archive.sort.nameDesc">Name Z-A</option>
-              <option value="size_desc" data-i18n="archive.sort.sizeDesc">Groesse absteigend</option>
-              <option value="size_asc" data-i18n="archive.sort.sizeAsc">Groesse aufsteigend</option>
-            </select>
-          </div>
-          <div id="analysisArchiveStatus" class="text-secondary small mb-2" role="status" aria-live="polite" data-i18n="archive.noneLoaded">Keine Archive geladen</div>
-          <div class="table-responsive analysis-table">
-            <table class="table table-sm align-middle mb-0">
-              <thead>
-                <tr>
-                  <th scope="col" data-i18n="analysis.archive.table.event">Veranstaltung</th>
-                  <th scope="col" class="text-nowrap" data-i18n="analysis.archive.table.modified">Geaendert</th>
-                  <th scope="col" class="text-end" data-i18n="analysis.archive.table.size">Groesse</th>
-                  <th scope="col" class="text-end" data-i18n="analysis.archive.table.actions">Aktionen</th>
-                </tr>
-              </thead>
-              <tbody id="analysisArchiveList"></tbody>
-            </table>
-          </div>
+    <h2 class="h5 mb-3">Kennzahlen</h2>
+    <div class="row g-3">
+      <div class="col-12 col-md-4">
+        <div class="border rounded p-3 bg-light h-100 analysis-block">
+          <div class="text-secondary small">Umsatz</div>
+          <div class="h4 mb-0">€ <?php echo htmlspecialchars($revenue_formatted, ENT_QUOTES, 'UTF-8'); ?></div>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="border rounded p-3 bg-light h-100 analysis-block">
+          <div class="text-secondary small">Transaktionen</div>
+          <div class="h4 mb-0"><?php echo htmlspecialchars($count_formatted, ENT_QUOTES, 'UTF-8'); ?></div>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="border rounded p-3 bg-light h-100 analysis-block">
+          <div class="text-secondary small">Durchschnitt</div>
+          <div class="h4 mb-0">€ <?php echo htmlspecialchars($average_formatted, ENT_QUOTES, 'UTF-8'); ?></div>
         </div>
       </div>
     </div>
-  </section>
-  <div class="col-12 col-lg-8">
-    <div class="row">
-      <section class="col-12 mb-3">
-        <div class="d-grid gap-3">
-          <div class="card shadow-sm border-0">
-            <div class="card-body">
-              <h2 class="h5 mb-2" data-i18n="analysis.chart.title">Verlauf</h2>
-              <p class="text-secondary small mb-0" data-i18n="analysis.chart.subtitle">Zeitlicher Verlauf der Belegung.</p>
-              <div class="analysis-chart bg-body-tertiary border rounded-4 p-3 mt-3">
-                <canvas id="analysisChart" class="w-100 h-100" data-i18n-aria-label="chart.visitorsAria" aria-label="Visitors Verlauf" role="img"></canvas>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      <section class="col-12 mb-3">
-        <div class="d-grid gap-3">
-          <div class="card shadow-sm border-0">
-            <div class="card-body">
-              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                <div>
-                  <h2 class="h5 mb-1" data-i18n="analysis.retention.title">Retention</h2>
-                  <p class="text-secondary small mb-0" data-i18n="analysis.retention.subtitle">Vergleich: Start vs. aktuelle Belegung.</p>
-                </div>
-                <div class="text-secondary small" data-i18n="analysis.retention.help">Live-Verbleib in %</div>
-              </div>
-              <div class="analysis-chart bg-body-tertiary border rounded-4 p-3">
-                <canvas id="retentionChart" class="w-100 h-100" data-i18n-aria-label="analysis.retention.aria" aria-label="Retention" role="img"></canvas>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+  </div>
+</section>
+
+<section class="card shadow-sm border-0">
+  <div class="card-body">
+    <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-2 mb-3">
+      <div>
+        <h2 class="h5 mb-1">Verkaufsverlauf</h2>
+        <p class="text-secondary small mb-0">Buchungen je <?php echo htmlspecialchars((string)$bucket_minutes, ENT_QUOTES, 'UTF-8'); ?> Minuten.</p>
+      </div>
+    </div>
+    <div class="border rounded p-3 bg-light">
+      <div class="analysis-chart">
+        <canvas id="salesChart" aria-label="Sales chart" role="img"></canvas>
+      </div>
+      <?php if (!$sales_labels) { ?>
+        <p class="text-secondary small mt-3 mb-0">Keine Buchungsdaten fuer die Darstellung.</p>
+      <?php } ?>
     </div>
   </div>
-  <div class="col-12 col-lg-4">
-    <div class="row">
-      <section class="col-12 mb-3">
-        <div class="d-grid gap-3">
-          <div class="card shadow-sm border-0">
-            <div class="card-body">
-              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                <div>
-                  <h2 class="h5 mb-1" data-i18n="analysis.metrics.title">Kennzahlen</h2>
-                  <p class="text-secondary small mb-0" data-i18n="analysis.metrics.subtitle">Metriken der Auswahl.</p>
-                </div>
-                <button id="analysisRefreshMetrics" class="btn btn-outline-secondary btn-sm" type="button">
-                  <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i><span data-i18n="common.refresh">Aktualisieren</span>
-                </button>
-              </div>
-              <div id="analysisMetrics" class="d-grid gap-2"></div>
-            </div>
-          </div>
-        </div>
-      </section>
-      <section class="col-12">
-        <div class="d-grid gap-3">
-          <div class="card shadow-sm border-0">
-            <div class="card-body">
-              <h2 class="h5 mb-2" data-i18n="analysis.archive.details.title">Archivdetails</h2>
-              <p class="text-secondary small mb-3" data-i18n="analysis.archive.details.note">Details zur Auswahl.</p>
-              <div id="analysisArchiveDetails" class="d-grid gap-2"></div>
-            </div>
-          </div>
-        </div>
-      </section>
+</section>
+
+<section class="card shadow-sm border-0 mt-4">
+  <div class="card-body">
+    <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-2 mb-3">
+      <div>
+        <h2 class="h5 mb-1">Buchungen pro Kasse</h2>
+        <p class="text-secondary small mb-0">Top 5 Kassen je <?php echo htmlspecialchars((string)$bucket_minutes, ENT_QUOTES, 'UTF-8'); ?> Minuten.</p>
+      </div>
+    </div>
+    <div class="border rounded p-3 bg-light">
+      <div class="analysis-chart">
+        <canvas id="cashierChart" aria-label="Cashier chart" role="img"></canvas>
+      </div>
+      <?php if (!$cashier_labels) { ?>
+        <p class="text-secondary small mt-3 mb-0">Keine Buchungsdaten fuer die Darstellung.</p>
+      <?php } ?>
     </div>
   </div>
-</div>
+</section>
+
+<section class="card shadow-sm border-0 mt-4">
+  <div class="card-body">
+    <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-2 mb-3">
+      <div>
+        <h2 class="h5 mb-1">Gesamt Einnahmen</h2>
+        <p class="text-secondary small mb-0">Umsatz je <?php echo htmlspecialchars((string)$bucket_minutes, ENT_QUOTES, 'UTF-8'); ?> Minuten.</p>
+      </div>
+    </div>
+    <div class="border rounded p-3 bg-light">
+      <div class="analysis-chart">
+        <canvas id="revenueChart" aria-label="Revenue chart" role="img"></canvas>
+      </div>
+      <?php if (!$revenue_labels) { ?>
+        <p class="text-secondary small mt-3 mb-0">Keine Umsatzdaten fuer die Darstellung.</p>
+      <?php } ?>
+    </div>
+  </div>
+</section>
+
+<section class="card shadow-sm border-0 mt-4">
+  <div class="card-body">
+    <h2 class="h5 mb-3">Buchungslog</h2>
+    <?php if (!is_file($booking_path)) { ?>
+      <p class="text-secondary mb-0">Kein Buchungslog gefunden. Datei fehlt.</p>
+    <?php } elseif (!$booking_rows) { ?>
+      <p class="text-secondary mb-0">Keine Buchungen vorhanden.</p>
+    <?php } else { ?>
+      <div class="table-responsive analysis-table">
+        <table class="table table-sm align-middle mb-0">
+          <?php if ($booking_visible_headers) { ?>
+            <thead>
+              <tr>
+                <?php foreach ($booking_visible_headers as $header) { ?>
+                  <th scope="col"><?php echo htmlspecialchars((string)$header, ENT_QUOTES, 'UTF-8'); ?></th>
+                <?php } ?>
+              </tr>
+            </thead>
+          <?php } ?>
+          <tbody>
+            <?php foreach ($booking_visible_rows as $row) { ?>
+              <tr>
+                <?php foreach ($row as $cell) { ?>
+                  <td><?php echo htmlspecialchars((string)$cell, ENT_QUOTES, 'UTF-8'); ?></td>
+                <?php } ?>
+              </tr>
+            <?php } ?>
+          </tbody>
+        </table>
+      </div>
+      <?php if ($booking_truncated) { ?>
+        <p class="text-secondary small mt-2 mb-0">Letzte <?php echo htmlspecialchars((string)$booking_limit, ENT_QUOTES, 'UTF-8'); ?> Buchungen angezeigt.</p>
+      <?php } ?>
+    <?php } ?>
+  </div>
+</section>
 <?php
 $content = ob_get_clean();
 
-$footer = <<<HTML
-<footer class="mt-4 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2 small text-secondary">
-  <div class="d-flex flex-wrap gap-2">
-    <a class="link-secondary text-decoration-none" href="https://julius-hunold.de/datenschutz" target="_blank" rel="noopener" data-i18n="footer.privacy">Datenschutz</a>
-    <span class="text-secondary" aria-hidden="true">•</span>
-    <a class="link-secondary text-decoration-none" href="https://julius-hunold.de/impressum" target="_blank" rel="noopener" data-i18n="footer.imprint">Impressum</a>
-  </div>
-  <div>
-    <span data-i18n="footer.builtBy">Erstellt von</span>
-    <a class="link-secondary text-decoration-none" href="https://hunold24.de" target="_blank" rel="noopener">Julius Hunold</a>
-  </div>
-</footer>
-HTML;
-
-$inline_scripts = [
-    "window.APP_CONFIG = " . json_encode([
-        'settings' => $settings,
-    ], JSON_UNESCAPED_SLASHES) . ";",
-];
-
 render_layout([
-    'title' => 'Kek-Counter Analyse',
-    'title_i18n' => 'title.analysis',
-    'description' => 'Analyse fuer archivierte Visitors-Veranstaltungen mit Verlauf und Kennzahlen.',
-    'app_name' => 'Kek-Counter',
-    'og_title' => 'Visitors-Analyse',
-    'og_description' => 'Analyse fuer archivierte Visitors-Veranstaltungen mit Verlauf und Kennzahlen.',
-    'manifest' => '',
+    'title' => 'Kek - Checkout Analyse',
+    'description' => 'Analyse fuer den Checkout.',
     'header' => $header,
     'content' => $content,
-    'footer' => $footer,
     'head_extra' => '<meta name="robots" content="noindex, nofollow">',
-    'inline_scripts' => $inline_scripts,
+    'manifest' => '',
     'include_chart_js' => true,
-    'scripts' => [
-        'assets/analysis.js',
+    'inline_scripts' => [
+        <<<JS
+(() => {
+  const salesPayload = $sales_chart_json;
+  const cashierPayload = $cashier_chart_json;
+  const revenuePayload = $revenue_chart_json;
+  if (!window.Chart) {
+    return;
+  }
+
+  function getThemeColor(varName, fallback) {
+    const value = getComputedStyle(document.documentElement)
+      .getPropertyValue(varName)
+      .trim();
+    return value || fallback;
+  }
+
+  function buildPalette() {
+    return {
+      sold: getThemeColor("--chart-line", "rgba(37, 99, 235, 1)"),
+      voucher: getThemeColor("--chart-retention-line", "rgba(6, 182, 212, 1)"),
+      free: getThemeColor("--chart-fill-start", "rgba(16, 185, 129, 0.9)"),
+      storno: getThemeColor("--chart-danger", "rgba(239, 68, 68, 1)"),
+      grid: getThemeColor("--bs-border-color", "rgba(148, 163, 184, 0.15)"),
+      tick: getThemeColor("--bs-secondary-color", "#64748b"),
+      tooltipBg: getThemeColor("--chart-tooltip-bg", "rgba(15, 23, 42, 0.9)"),
+      tooltipColor: getThemeColor("--chart-tooltip-color", "#ffffff"),
+    };
+  }
+
+  function createSalesChart() {
+    const canvas = document.getElementById("salesChart");
+    if (!canvas || !salesPayload || !Array.isArray(salesPayload.labels)) {
+      return null;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return null;
+    }
+    const palette = buildPalette();
+    return new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: salesPayload.labels,
+        datasets: [
+          {
+            label: "Verkauft",
+            data: salesPayload.series?.Verkauft || [],
+            borderColor: palette.sold,
+            backgroundColor: "transparent",
+            tension: 0.35,
+            borderWidth: 2,
+            pointRadius: 0,
+          },
+          {
+            label: "Gutschein",
+            data: salesPayload.series?.Gutschein || [],
+            borderColor: palette.voucher,
+            backgroundColor: "transparent",
+            tension: 0.35,
+            borderWidth: 2,
+            pointRadius: 0,
+          },
+          {
+            label: "Freigetraenk",
+            data: salesPayload.series?.Freigetraenk || [],
+            borderColor: palette.free,
+            backgroundColor: "transparent",
+            tension: 0.35,
+            borderWidth: 2,
+            pointRadius: 0,
+          },
+          {
+            label: "Storno",
+            data: salesPayload.series?.Storno || [],
+            borderColor: palette.storno,
+            backgroundColor: "transparent",
+            tension: 0.35,
+            borderWidth: 2,
+            pointRadius: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { intersect: false, mode: "index" },
+        plugins: {
+          legend: { position: "bottom" },
+          tooltip: {
+            backgroundColor: palette.tooltipBg,
+            titleColor: palette.tooltipColor,
+            bodyColor: palette.tooltipColor,
+            padding: 12,
+            cornerRadius: 12,
+          },
+        },
+        scales: {
+          x: {
+            ticks: { color: palette.tick, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+            grid: { color: palette.grid },
+          },
+          y: {
+            ticks: { color: palette.tick, precision: 0 },
+            grid: { color: palette.grid },
+            beginAtZero: true,
+          },
+        },
+      },
+    });
+  }
+
+  function createCashierChart() {
+    const canvas = document.getElementById("cashierChart");
+    if (!canvas || !cashierPayload || !Array.isArray(cashierPayload.labels)) {
+      return null;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return null;
+    }
+    const palette = buildPalette();
+    const colors = [
+      palette.sold,
+      palette.voucher,
+      palette.free,
+      palette.storno,
+      "rgba(168, 85, 247, 1)",
+      "rgba(234, 179, 8, 1)",
+      "rgba(59, 130, 246, 1)",
+      "rgba(14, 165, 233, 1)",
+    ];
+    const series = cashierPayload.series || {};
+    const labels = Object.keys(series);
+    const datasets = labels.map((label, index) => ({
+      label,
+      data: series[label] || [],
+      borderColor: colors[index % colors.length],
+      backgroundColor: "transparent",
+      tension: 0.35,
+      borderWidth: 2,
+      pointRadius: 0,
+    }));
+    return new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: cashierPayload.labels,
+        datasets,
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { intersect: false, mode: "index" },
+        plugins: {
+          legend: { position: "bottom" },
+          tooltip: {
+            backgroundColor: palette.tooltipBg,
+            titleColor: palette.tooltipColor,
+            bodyColor: palette.tooltipColor,
+            padding: 12,
+            cornerRadius: 12,
+          },
+        },
+        scales: {
+          x: {
+            ticks: { color: palette.tick, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+            grid: { color: palette.grid },
+          },
+          y: {
+            ticks: { color: palette.tick, precision: 0 },
+            grid: { color: palette.grid },
+            beginAtZero: true,
+          },
+        },
+      },
+    });
+  }
+
+  function createRevenueChart() {
+    const canvas = document.getElementById("revenueChart");
+    if (!canvas || !revenuePayload || !Array.isArray(revenuePayload.labels)) {
+      return null;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return null;
+    }
+    const palette = buildPalette();
+    return new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: revenuePayload.labels,
+        datasets: [
+          {
+            label: "Umsatz",
+            data: revenuePayload.series || [],
+            borderColor: palette.sold,
+            backgroundColor: "transparent",
+            tension: 0.35,
+            borderWidth: 2,
+            pointRadius: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { intersect: false, mode: "index" },
+        plugins: {
+          legend: { position: "bottom" },
+          tooltip: {
+            backgroundColor: palette.tooltipBg,
+            titleColor: palette.tooltipColor,
+            bodyColor: palette.tooltipColor,
+            padding: 12,
+            cornerRadius: 12,
+            callbacks: {
+              label(item) {
+                const value = typeof item.parsed?.y === "number" ? item.parsed.y : item.raw;
+                if (typeof value === "number") {
+                  return "Umsatz: " + value.toFixed(2) + " EUR";
+                }
+                return "Umsatz: " + value;
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { color: palette.tick, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+            grid: { color: palette.grid },
+          },
+          y: {
+            ticks: { color: palette.tick },
+            grid: { color: palette.grid },
+            beginAtZero: true,
+          },
+        },
+      },
+    });
+  }
+
+  const salesChart = createSalesChart();
+  const cashierChart = createCashierChart();
+  const revenueChart = createRevenueChart();
+
+  function applyTheme() {
+    const next = buildPalette();
+    if (salesChart) {
+      salesChart.data.datasets[0].borderColor = next.sold;
+      salesChart.data.datasets[1].borderColor = next.voucher;
+      salesChart.data.datasets[2].borderColor = next.free;
+      salesChart.data.datasets[3].borderColor = next.storno;
+      salesChart.options.scales.x.ticks.color = next.tick;
+      salesChart.options.scales.y.ticks.color = next.tick;
+      salesChart.options.scales.x.grid.color = next.grid;
+      salesChart.options.scales.y.grid.color = next.grid;
+      if (salesChart.options.plugins?.tooltip) {
+        salesChart.options.plugins.tooltip.backgroundColor = next.tooltipBg;
+        salesChart.options.plugins.tooltip.titleColor = next.tooltipColor;
+        salesChart.options.plugins.tooltip.bodyColor = next.tooltipColor;
+      }
+      salesChart.update();
+    }
+    if (cashierChart) {
+      cashierChart.options.scales.x.ticks.color = next.tick;
+      cashierChart.options.scales.y.ticks.color = next.tick;
+      cashierChart.options.scales.x.grid.color = next.grid;
+      cashierChart.options.scales.y.grid.color = next.grid;
+      if (cashierChart.options.plugins?.tooltip) {
+        cashierChart.options.plugins.tooltip.backgroundColor = next.tooltipBg;
+        cashierChart.options.plugins.tooltip.titleColor = next.tooltipColor;
+        cashierChart.options.plugins.tooltip.bodyColor = next.tooltipColor;
+      }
+      cashierChart.update();
+    }
+    if (revenueChart) {
+      revenueChart.data.datasets[0].borderColor = next.sold;
+      revenueChart.options.scales.x.ticks.color = next.tick;
+      revenueChart.options.scales.y.ticks.color = next.tick;
+      revenueChart.options.scales.x.grid.color = next.grid;
+      revenueChart.options.scales.y.grid.color = next.grid;
+      if (revenueChart.options.plugins?.tooltip) {
+        revenueChart.options.plugins.tooltip.backgroundColor = next.tooltipBg;
+        revenueChart.options.plugins.tooltip.titleColor = next.tooltipColor;
+        revenueChart.options.plugins.tooltip.bodyColor = next.tooltipColor;
+      }
+      revenueChart.update();
+    }
+  }
+
+  document.addEventListener("themechange", applyTheme);
+  document.addEventListener("accessibilitychange", applyTheme);
+})();
+JS
     ],
 ]);

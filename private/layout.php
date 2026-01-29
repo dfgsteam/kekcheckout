@@ -133,6 +133,7 @@ function render_layout(array $options): void
     if ($include_settings) {
         echo render_settings_modal();
     }
+    echo render_error_modal();
     if ($modals_html !== '') {
         echo $modals_html . "\n";
     }
@@ -146,6 +147,7 @@ function render_layout(array $options): void
     if ($include_settings) {
         echo "    <script src=\"assets/settings.js\"></script>\n";
     }
+    echo "    <script src=\"assets/errors.js\"></script>\n";
     if (is_string($inline_scripts)) {
         $inline_scripts = [$inline_scripts];
     }
@@ -237,6 +239,28 @@ function render_settings_modal(): string
             <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">
               <i class="bi bi-x-lg me-1" aria-hidden="true"></i><span data-i18n="common.close">Schliessen</span>
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+HTML;
+}
+
+function render_error_modal(): string
+{
+    return <<<HTML
+    <div class="modal fade" id="errorDialog" tabindex="-1" aria-labelledby="errorTitle" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="modal-title fs-5" id="errorTitle">Fehler</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" data-i18n-aria-label="common.close" aria-label="Schliessen"></button>
+          </div>
+          <div class="modal-body">
+            <p id="errorMessage" class="mb-0">Ein Fehler ist aufgetreten.</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal" data-i18n="common.close">Schliessen</button>
           </div>
         </div>
       </div>

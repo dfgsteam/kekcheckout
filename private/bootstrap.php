@@ -13,6 +13,8 @@ function load_settings(string $path): array
         'window_hours' => 3,
         'tick_minutes' => 15,
         'capacity_default' => 150,
+        'storno_max_minutes' => 3,
+        'storno_max_back' => 5,
     ];
 
     if (!is_file($path)) {

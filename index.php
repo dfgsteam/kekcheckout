@@ -1,7 +1,144 @@
 <?php
 declare(strict_types=1);
 
+$access_tokens_path = __DIR__ . '/private/access_tokens.json';
+$legacy_access_token_path = __DIR__ . '/private/.access_token';
+$admin_token_path = __DIR__ . '/private/.admin_token';
+$booking_csv_path = __DIR__ . '/private/bookings.csv';
+$settings_path = __DIR__ . '/private/settings.json';
+$log_path = __DIR__ . '/private/request.log';
+
+require_once __DIR__ . '/private/bootstrap.php';
+require_once __DIR__ . '/private/auth.php';
+require_once __DIR__ . '/private/menu_lib.php';
+require_once __DIR__ . '/private/sales_lib.php';
 require_once __DIR__ . '/private/layout.php';
+
+/**
+ * Send a JSON error response and stop execution.
+ */
+function send_json_error(int $code, string $message): void
+{
+    header('Content-Type: application/json; charset=utf-8');
+    http_response_code($code);
+    echo json_encode(['error' => $message]);
+    exit;
+}
+
+/**
+ * Resolve a user identity from token headers.
+ */
+function resolve_user_identity(array $access_tokens, string $admin_token): array
+{
+    $provided_access = $_SERVER['HTTP_X_ACCESS_TOKEN'] ?? '';
+    $provided_admin = $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? '';
+    $bearer = get_bearer_token();
+    $candidates = array_filter([$provided_access, $provided_admin, $bearer], 'strlen');
+
+    foreach ($candidates as $candidate) {
+        foreach ($access_tokens as $entry) {
+            if (!is_array($entry) || empty($entry['active'])) {
+                continue;
+            }
+            $token = (string)($entry['token'] ?? '');
+            if ($token !== '' && hash_equals($token, $candidate)) {
+                return [
+                    'id' => (string)($entry['id'] ?? 'user'),
+                    'name' => (string)($entry['name'] ?? 'User'),
+                ];
+            }
+        }
+        if ($admin_token !== '' && hash_equals($admin_token, $candidate)) {
+            return ['id' => 'admin', 'name' => 'Admin'];
+        }
+    }
+    return ['id' => 'unknown', 'name' => 'Unknown'];
+}
+
+$action = $_GET['action'] ?? null;
+if ($action === 'book' || $action === 'storno') {
+    header('Content-Type: application/json; charset=utf-8');
+    $access_tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
+    $admin_token = load_token('KEKCOUNTER_ADMIN_TOKEN', $admin_token_path);
+    require_any_token($access_tokens, $admin_token);
+    $payload = read_json_body();
+
+    if ($action === 'book') {
+        $product_id = (string)($payload['productId'] ?? '');
+        $type = (string)($payload['type'] ?? '');
+        if ($product_id === '' || $type === '') {
+            send_json_error(400, 'Missing data');
+        }
+
+        $menu = menu_get_menu(__DIR__ . '/private/menu_categories.json', __DIR__ . '/private/menu_items.json');
+        $product = null;
+        $category = null;
+        foreach ($menu['items'] as $item) {
+            if (!is_array($item) || empty($item['active'])) {
+                continue;
+            }
+            if ((string)($item['id'] ?? '') === $product_id) {
+                $product = $item;
+                break;
+            }
+        }
+        if ($product === null) {
+            send_json_error(404, 'Product not found');
+        }
+        foreach ($menu['categories'] as $cat) {
+            if (!is_array($cat) || empty($cat['active'])) {
+                continue;
+            }
+            if ((string)($cat['id'] ?? '') === (string)($product['category_id'] ?? '')) {
+                $category = $cat;
+                break;
+            }
+        }
+        if ($category === null) {
+            send_json_error(404, 'Category not found');
+        }
+
+        $user = resolve_user_identity($access_tokens, $admin_token);
+        $booking = sales_build_booking($user, $product, $category, $type);
+        if (!sales_append_booking_csv($booking_csv_path, $booking)) {
+            send_json_error(500, 'Save failed');
+        }
+        if ($log_path !== '') {
+            log_event($log_path, 'book', 200, ['product' => $product_id, 'type' => $type]);
+        }
+        echo json_encode(['ok' => true, 'booking' => $booking]);
+        exit;
+    }
+
+    if ($action === 'storno') {
+        $reason = (string)($payload['reason'] ?? '');
+        $user = resolve_user_identity($access_tokens, $admin_token);
+        $settings = load_settings($settings_path);
+        $max_minutes = (int)($settings['storno_max_minutes'] ?? 3);
+        $max_back = (int)($settings['storno_max_back'] ?? 5);
+        if ($max_minutes < 0) {
+            $max_minutes = 0;
+        }
+        if ($max_back < 0) {
+            $max_back = 0;
+        }
+        $result = sales_storno_last_booking_csv(
+            $booking_csv_path,
+            (string)$user['id'],
+            $reason,
+            $max_minutes,
+            $max_back
+        );
+        if (!$result['ok']) {
+            send_json_error(400, $result['error'] ?? 'Storno failed');
+        }
+        if ($log_path !== '') {
+            log_event($log_path, 'storno', 200, ['user' => (string)$user['id']]);
+        }
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+}
 
 $categories_path = __DIR__ . '/private/menu_categories.json';
 $items_path = __DIR__ . '/private/menu_items.json';
@@ -57,16 +194,15 @@ $header = <<<HTML
         <i class="bi bi-sliders2" aria-hidden="true"></i>
         <span class="btn-icon-text" data-i18n="settings.button">Einstellungen</span>
       </button>
-      <button
-        id="downloadCurrent"
+      <a
         class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
-        type="button"
-        data-i18n-aria-label="nav.csv"
-        data-i18n-title="nav.csvDownload"
+        href="tablet.php"
+        aria-label="Tablet"
+        title="Tablet"
       >
-        <i class="bi bi-download" aria-hidden="true"></i>
-        <span class="btn-icon-text" data-i18n="nav.csv">CSV</span>
-      </button>
+        <i class="bi bi-tablet" aria-hidden="true"></i>
+        <span class="btn-icon-text">Tablet</span>
+      </a>
       <a
         class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
         href="display.php"
@@ -103,7 +239,10 @@ ob_start();
 ?>
 <section class="card shadow-sm border-0 mb-4">
   <div class="card-body">
-    <h2 class="h5 mb-3">Kategorien</h2>
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+      <h2 class="h5 mb-0">Kategorien</h2>
+      <button type="button" class="btn btn-lg btn-outline-danger js-auth-only d-none" id="stornoButton">Storno letzte Buchung</button>
+    </div>
     <ul class="nav nav-tabs" role="tablist">
       <?php foreach ($categories as $index => $category) {
           $is_active = $index === 0;
@@ -157,7 +296,7 @@ ob_start();
                     </div>
                   </div>
                   <div class="d-flex flex-wrap align-items-center gap-2">
-                    <span class="fw-semibold">€ <?php echo htmlspecialchars($item['price'], ENT_QUOTES, 'UTF-8'); ?></span>
+                    <span class="fw-semibold fs-4">€ <?php echo htmlspecialchars($item['price'], ENT_QUOTES, 'UTF-8'); ?></span>
                     <?php
                     $ingredients = $item['ingredients'] ?? [];
                     $ingredients_text = is_array($ingredients) ? implode(', ', $ingredients) : (string)$ingredients;
@@ -175,11 +314,9 @@ ob_start();
                       data-item-ingredients="<?php echo htmlspecialchars($ingredients_text, ENT_QUOTES, 'UTF-8'); ?>"
                       data-item-preparation="<?php echo htmlspecialchars($preparation_text, ENT_QUOTES, 'UTF-8'); ?>"
                     >Info</button>
-                    <?php if ($has_valid_key) { ?>
-                      <button type="button" class="btn btn-lg btn-primary">Verkauf</button>
-                      <button type="button" class="btn btn-lg btn-outline-primary">Gutschein</button>
-                      <button type="button" class="btn btn-lg btn-outline-success">Freigetraenk</button>
-                    <?php } ?>
+                    <button type="button" class="btn btn-lg btn-primary js-auth-only d-none" data-book-type="Verkauft" data-product-id="<?php echo htmlspecialchars((string)($item['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">Verkauf</button>
+                    <button type="button" class="btn btn-lg btn-outline-primary js-auth-only d-none" data-book-type="Gutschein" data-product-id="<?php echo htmlspecialchars((string)($item['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">Gutschein</button>
+                    <button type="button" class="btn btn-lg btn-outline-success js-auth-only d-none" data-book-type="Freigetraenk" data-product-id="<?php echo htmlspecialchars((string)($item['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">Freigetraenk</button>
                   </div>
                 </div>
               </div>
@@ -266,6 +403,12 @@ HTML;
 $inline_scripts = [
     <<<'JS'
 (() => {
+  window.kekDisableCounter = true;
+})();
+JS
+    ,
+    <<<'JS'
+(() => {
   const modalEl = document.getElementById('itemInfoModal');
   if (!modalEl || !window.bootstrap?.Modal) {
     return;
@@ -335,6 +478,132 @@ $inline_scripts = [
     if (preparationEl) preparationEl.textContent = preparation || 'Keine Angaben';
     modal.show();
   });
+})();
+JS
+    ,
+    <<<'JS'
+(() => {
+  const ACCESS_TOKEN_KEY = "kekcounter.accessToken";
+  const ADMIN_TOKEN_KEY = "kekcounter.adminToken";
+  const authButtons = document.querySelectorAll(".js-auth-only");
+  const accessSave = document.getElementById("accessSave");
+  const accessClear = document.getElementById("accessClear");
+  const accessLogout = document.getElementById("accessLogout");
+
+  function hasToken(key) {
+    try {
+      return (localStorage.getItem(key) || "") !== "";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function updateAuthButtons() {
+    const isAuthed = hasToken(ACCESS_TOKEN_KEY) || hasToken(ADMIN_TOKEN_KEY);
+    authButtons.forEach((btn) => {
+      btn.classList.toggle("d-none", !isAuthed);
+    });
+  }
+
+  updateAuthButtons();
+  window.addEventListener("storage", updateAuthButtons);
+  if (accessSave) {
+    accessSave.addEventListener("click", () => {
+      setTimeout(updateAuthButtons, 50);
+    });
+  }
+  if (accessClear) {
+    accessClear.addEventListener("click", () => {
+      setTimeout(updateAuthButtons, 50);
+    });
+  }
+  if (accessLogout) {
+    accessLogout.addEventListener("click", () => {
+      setTimeout(updateAuthButtons, 50);
+    });
+  }
+})();
+JS
+    ,
+    <<<'JS'
+(() => {
+  const ACCESS_TOKEN_KEY = "kekcounter.accessToken";
+  const ADMIN_TOKEN_KEY = "kekcounter.adminToken";
+  const stornoButton = document.getElementById("stornoButton");
+
+  function getTokenHeaders() {
+    const headers = { "X-Requested-With": "fetch" };
+    try {
+      const access = localStorage.getItem(ACCESS_TOKEN_KEY) || "";
+      const admin = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
+      if (access) {
+        headers["X-Access-Token"] = access;
+      } else if (admin) {
+        headers["X-Admin-Token"] = admin;
+      }
+    } catch (error) {
+      return headers;
+    }
+    return headers;
+  }
+
+  async function postBooking(action, payload) {
+    const response = await fetch(`?action=${action}`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        ...getTokenHeaders(),
+      },
+      body: JSON.stringify(payload || {}),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.error || "Request failed");
+    }
+    return data;
+  }
+
+  document.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-book-type]");
+    if (!button) {
+      return;
+    }
+    const productId = button.getAttribute("data-product-id") || "";
+    const type = button.getAttribute("data-book-type") || "";
+    if (!productId || !type) {
+      return;
+    }
+    button.disabled = true;
+    try {
+      await postBooking("book", { productId, type });
+    } catch (error) {
+      if (window.kekErrors?.show) {
+        window.kekErrors.show(error.message || "Buchung fehlgeschlagen");
+      } else {
+        alert(error.message || "Buchung fehlgeschlagen");
+      }
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  if (stornoButton) {
+    stornoButton.addEventListener("click", async () => {
+      stornoButton.disabled = true;
+      try {
+        await postBooking("storno", {});
+      } catch (error) {
+        if (window.kekErrors?.show) {
+          window.kekErrors.show(error.message || "Storno fehlgeschlagen");
+        } else {
+          alert(error.message || "Storno fehlgeschlagen");
+        }
+      } finally {
+        stornoButton.disabled = false;
+      }
+    });
+  }
 })();
 JS
 ];

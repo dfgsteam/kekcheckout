@@ -839,8 +839,10 @@ if (decBtn) {
   });
 }
 
-fetchData("status");
-setInterval(() => fetchData("status"), 15000);
+if (!window.kekDisableCounter) {
+  fetchData("status");
+  setInterval(() => fetchData("status"), 15000);
+}
 refreshAccessStatus();
 
 document.addEventListener("themechange", applyChartTheme);

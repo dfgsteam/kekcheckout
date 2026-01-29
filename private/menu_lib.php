@@ -365,6 +365,8 @@ function menu_build_display_categories(string $categories_path, string $items_pa
             $tags = menu_normalize_tags($item['tags'], 24, 8);
         }
         $items_by_category[$category_id][] = [
+            'id' => (string)($item['id'] ?? ''),
+            'category_id' => $category_id,
             'group' => '',
             'name' => (string)($item['name'] ?? ''),
             'price' => (string)($item['price'] ?? '0.00'),

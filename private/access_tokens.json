@@ -7,8 +7,8 @@
     },
     {
         "id": "marvin",
-        "name": "Marvin",
-        "token": "test",
+        "name": "marvin",
+        "token": "marvin",
         "active": true
     }
 ]
