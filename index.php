@@ -9,53 +9,32 @@ $settings_path = __DIR__ . '/private/settings.json';
 $log_path = __DIR__ . '/private/request.log';
 
 require_once __DIR__ . '/private/bootstrap.php';
-require_once __DIR__ . '/private/auth.php';
-require_once __DIR__ . '/private/menu_lib.php';
-require_once __DIR__ . '/private/sales_lib.php';
-require_once __DIR__ . '/private/layout.php';
 
+use KekCheckout\Settings;
+use KekCheckout\Logger;
+use KekCheckout\Auth;
+use KekCheckout\MenuManager;
+use KekCheckout\SalesManager;
+use KekCheckout\Layout;
 
-/**
- * Resolve a user identity from token headers.
- */
-function resolve_user_identity(array $access_tokens, string $admin_token): array
-{
-    $provided_access = $_SERVER['HTTP_X_ACCESS_TOKEN'] ?? '';
-    $provided_admin = $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? '';
-    $bearer = get_bearer_token();
-    $candidates = array_filter([$provided_access, $provided_admin, $bearer], 'strlen');
-
-    foreach ($candidates as $candidate) {
-        foreach ($access_tokens as $entry) {
-            if (!is_array($entry) || empty($entry['active'])) {
-                continue;
-            }
-            $token = (string)($entry['token'] ?? '');
-            if ($token !== '' && hash_equals($token, $candidate)) {
-                return [
-                    'id' => (string)($entry['id'] ?? 'user'),
-                    'name' => (string)($entry['name'] ?? 'User'),
-                ];
-            }
-        }
-        if ($admin_token !== '' && hash_equals($admin_token, $candidate)) {
-            return ['id' => 'admin', 'name' => 'Admin'];
-        }
-    }
-    return ['id' => 'unknown', 'name' => 'Unknown'];
-}
+$settingsManager = new Settings($settings_path);
+$logger = new Logger($log_path);
+$auth = new Auth($access_tokens_path, $legacy_access_token_path, $admin_token_path);
+$menuManager = new MenuManager(__DIR__ . '/private/menu_categories.json', __DIR__ . '/private/menu_items.json');
+$salesManager = new SalesManager($booking_csv_path);
+$layoutManager = new Layout();
 
 $action = $_GET['action'] ?? null;
 if ($action === 'book' || $action === 'storno') {
     header('Content-Type: application/json; charset=utf-8');
-    $access_tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
-    $admin_token = load_token('KEKCOUNTER_ADMIN_TOKEN', $admin_token_path);
+    $access_tokens = $auth->loadAccessTokens();
+    $admin_token = $auth->loadAdminToken();
     require_any_token($access_tokens, $admin_token);
     $payload = read_json_body();
 
     // CSRF check for state-changing actions
     $csrf_token = $payload['csrf_token'] ?? ($_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
-    if (!verify_csrf_token($csrf_token)) {
+    if (!$auth->verifyCsrfToken($csrf_token)) {
         send_json_error(403, 'Invalid CSRF token', $log_path, $action ?? '');
     }
 
@@ -66,7 +45,7 @@ if ($action === 'book' || $action === 'storno') {
             send_json_error(400, 'Missing data', $log_path, $action ?? '');
         }
 
-        $menu = menu_get_menu(__DIR__ . '/private/menu_categories.json', __DIR__ . '/private/menu_items.json');
+        $menu = $menuManager->getMenu();
         $product = null;
         $category = null;
         foreach ($menu['items'] as $item) {
@@ -94,22 +73,20 @@ if ($action === 'book' || $action === 'storno') {
             send_json_error(404, 'Category not found', $log_path, $action ?? '');
         }
 
-        $user = resolve_user_identity($access_tokens, $admin_token);
-        $booking = sales_build_booking($user, $product, $category, $type);
-        if (!sales_append_booking_csv($booking_csv_path, $booking)) {
+        $user = $auth->resolveUserIdentity($access_tokens, $admin_token);
+        $booking = $salesManager->buildBooking($user, $product, $category, $type);
+        if (!$salesManager->appendBookingCsv($booking)) {
             send_json_error(500, 'Save failed', $log_path, $action ?? '');
         }
-        if ($log_path !== '') {
-            log_event($log_path, 'book', 200, ['product' => $product_id, 'type' => $type]);
-        }
+        $logger->log('book', 200, ['product' => $product_id, 'type' => $type]);
         echo json_encode(['ok' => true, 'booking' => $booking]);
         exit;
     }
 
     if ($action === 'storno') {
         $reason = (string)($payload['reason'] ?? '');
-        $user = resolve_user_identity($access_tokens, $admin_token);
-        $settings = load_settings($settings_path);
+        $user = $auth->resolveUserIdentity($access_tokens, $admin_token);
+        $settings = $settingsManager->getAll();
         $max_minutes = (int)($settings['storno_max_minutes'] ?? 3);
         $max_back = (int)($settings['storno_max_back'] ?? 5);
         if ($max_minutes < 0) {
@@ -118,8 +95,7 @@ if ($action === 'book' || $action === 'storno') {
         if ($max_back < 0) {
             $max_back = 0;
         }
-        $result = sales_storno_last_booking_csv(
-            $booking_csv_path,
+        $result = $salesManager->stornoLastBookingCsv(
             (string)$user['id'],
             $reason,
             $max_minutes,
@@ -128,9 +104,7 @@ if ($action === 'book' || $action === 'storno') {
         if (!$result['ok']) {
             send_json_error(400, $result['error'] ?? 'Storno failed', $log_path, $action ?? '');
         }
-        if ($log_path !== '') {
-            log_event($log_path, 'storno', 200, ['user' => (string)$user['id']]);
-        }
+        $logger->log('storno', 200, ['user' => (string)$user['id']]);
         echo json_encode(['ok' => true]);
         exit;
     }
@@ -138,11 +112,26 @@ if ($action === 'book' || $action === 'storno') {
 
 $categories_path = __DIR__ . '/private/menu_categories.json';
 $items_path = __DIR__ . '/private/menu_items.json';
-require_once __DIR__ . '/private/menu_lib.php';
 
-menu_ensure_seed($categories_path, $items_path);
+$menuManager->ensureSeed();
+$categories = $menuManager->buildDisplayCategories();
 
-$categories = menu_build_display_categories($categories_path, $items_path);
+$all_items = [];
+foreach ($categories as $cat) {
+    if (isset($cat['items']) && is_array($cat['items'])) {
+        foreach ($cat['items'] as $item) {
+            $all_items[] = $item;
+        }
+    }
+}
+usort($all_items, fn($a, $b) => strcasecmp((string)($a['name'] ?? ''), (string)($b['name'] ?? '')));
+
+$categories[] = [
+    'id' => 'all',
+    'name' => 'Alle',
+    'name_i18n' => 'pos.tabs.all',
+    'items' => $all_items
+];
 
 $has_valid_key = false;
 
@@ -153,13 +142,14 @@ $header = <<<HTML
     <h1 class="display-5 fw-semibold mb-2">Produkte</h1>
     <p class="text-secondary mb-0">Artikel nach Kategorien auswaehlen und buchen.</p>
   </div>
-  <div class="d-flex flex-column align-items-start align-items-lg-end gap-2">
-    <div class="d-flex align-items-center gap-2 small text-secondary border rounded-pill px-3 py-2 bg-white shadow-sm" role="status" aria-live="polite">
+  <div class="d-flex flex-column align-items-start align-items-lg-end gap-2 ms-lg-auto">
+    <div class="d-flex align-items-center justify-content-lg-end gap-2 small text-secondary border rounded-pill px-3 py-2 bg-white shadow-sm w-100 w-lg-auto" role="status" aria-live="polite">
+      <span id="queueBadge" class="badge rounded-pill bg-warning text-dark d-none" title="Ausstehende Buchungen">Queue: 0</span>
       <span id="statusDot" class="status-dot rounded-circle bg-success" aria-hidden="true"></span>
       <span class="text-uppercase text-secondary" data-i18n="app.updated">Updated</span>
       <span id="updated" class="fw-semibold text-body">--:--:--</span>
     </div>
-    <div class="icon-actions icon-actions--split">
+    <div class="icon-actions icon-actions--split justify-content-lg-end w-100">
       <button
         id="accessOpen"
         class="btn btn-outline-primary btn-sm btn-icon"
@@ -226,11 +216,20 @@ ob_start();
 ?>
 <section class="card shadow-sm border-0 mb-4">
   <div class="card-body">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-      <h2 class="h5 mb-0">Kategorien</h2>
-      <button type="button" class="btn btn-lg btn-outline-danger js-auth-only d-none" id="stornoButton">Storno letzte Buchung</button>
+    <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between justify-content-lg-end gap-3 mb-3">
+      <h2 class="h5 mb-0 me-lg-auto">Kategorien</h2>
+      <button type="button" class="btn btn-lg btn-outline-danger js-auth-only d-none w-100 w-sm-auto" id="stornoButton">
+        <i class="bi bi-arrow-counterclockwise me-2" aria-hidden="true"></i>
+        <span data-i18n="pos.storno.button">Storno letzte Buchung</span>
+      </button>
     </div>
-    <ul class="nav nav-tabs" role="tablist">
+    <ul class="nav nav-tabs flex-nowrap overflow-x-auto pb-1" role="tablist" style="-webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none;">
+      <style>
+        .nav-tabs::-webkit-scrollbar { display: none; }
+        @media (min-width: 576px) {
+          .w-sm-auto { width: auto !important; }
+        }
+      </style>
       <?php foreach ($categories as $index => $category) {
           $is_active = $index === 0;
           $tab_id = 'tab-' . $category['id'];
@@ -246,7 +245,8 @@ ob_start();
             role="tab"
             aria-controls="<?php echo $pane_id; ?>"
             aria-selected="<?php echo $is_active ? 'true' : 'false'; ?>"
-          ><?php echo htmlspecialchars($category['label'], ENT_QUOTES, 'UTF-8'); ?></button>
+            <?php if (isset($category['name_i18n']) || isset($category['label_i18n'])) { echo 'data-i18n="' . ($category['name_i18n'] ?? $category['label_i18n']) . '"'; } ?>
+          ><?php echo htmlspecialchars((string)($category['name'] ?? $category['label'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></button>
         </li>
       <?php } ?>
     </ul>
@@ -257,9 +257,40 @@ ob_start();
           $pane_id = 'pane-' . $category['id'];
           ?>
         <div class="tab-pane fade<?php echo $is_active ? ' show active' : ''; ?>" id="<?php echo $pane_id; ?>" role="tabpanel" aria-labelledby="<?php echo $tab_id; ?>">
-          <div class="d-flex flex-column gap-3">
-            <?php foreach ($category['items'] as $item) { ?>
-              <div class="card border-0 shadow-sm">
+          <?php if ($category['id'] === 'all') { ?>
+            <div class="mb-4">
+              <div class="input-group input-group-lg shadow-sm">
+                <span class="input-group-text bg-white border-end-0 text-secondary">
+                  <i class="bi bi-search"></i>
+                </span>
+                <input
+                  type="text"
+                  id="posSearch"
+                  class="form-control border-start-0 ps-0"
+                  placeholder="Produkte suchen..."
+                  data-i18n-placeholder="common.search"
+                  autocomplete="off"
+                >
+              </div>
+            </div>
+          <?php } ?>
+          <div class="d-flex flex-column gap-3 js-pos-items">
+            <?php foreach ($category['items'] as $item) {
+                $ingredients = $item['ingredients'] ?? [];
+                $ingredients_text = is_array($ingredients) ? implode(', ', $ingredients) : (string)$ingredients;
+                $tags = $item['tags'] ?? [];
+                $tags_text = is_array($tags) ? implode(', ', $tags) : (string)$tags;
+                $preparation_text = (string)($item['preparation'] ?? '');
+
+                $search_terms = [(string)($item['name'] ?? ''), (string)($item['group'] ?? '')];
+                if (is_array($tags)) {
+                    foreach ($tags as $tag) {
+                        $search_terms[] = (string)$tag;
+                    }
+                }
+                $search_string = strtolower(implode(' ', array_filter($search_terms)));
+                ?>
+              <div class="card border-0 shadow-sm js-searchable-item" data-search-term="<?php echo htmlspecialchars($search_string, ENT_QUOTES, 'UTF-8'); ?>">
                 <div class="card-body d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
                   <div class="flex-grow-1">
                     <?php if (($item['group'] ?? '') !== '') { ?>
@@ -282,7 +313,7 @@ ob_start();
                       ?>
                     </div>
                   </div>
-                  <div class="d-flex flex-wrap align-items-center gap-2">
+                  <div class="d-flex flex-column align-items-end flex-md-row align-items-md-center justify-content-lg-end gap-2 w-100 w-md-auto">
                     <span class="fw-semibold fs-4">€ <?php echo htmlspecialchars($item['price'], ENT_QUOTES, 'UTF-8'); ?></span>
                     <?php
                     $ingredients = $item['ingredients'] ?? [];
@@ -290,20 +321,34 @@ ob_start();
                     $tags_text = is_array($tags) ? implode(', ', $tags) : (string)$tags;
                     $preparation_text = (string)($item['preparation'] ?? '');
                     ?>
-                    <button
-                      type="button"
-                      class="btn btn-lg btn-outline-secondary"
-                      data-item-info
-                      data-item-name="<?php echo htmlspecialchars((string)($item['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
-                      data-item-category="<?php echo htmlspecialchars((string)($category['label'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
-                      data-item-price="<?php echo htmlspecialchars((string)($item['price'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
-                      data-item-tags="<?php echo htmlspecialchars($tags_text, ENT_QUOTES, 'UTF-8'); ?>"
-                      data-item-ingredients="<?php echo htmlspecialchars($ingredients_text, ENT_QUOTES, 'UTF-8'); ?>"
-                      data-item-preparation="<?php echo htmlspecialchars($preparation_text, ENT_QUOTES, 'UTF-8'); ?>"
-                    >Info</button>
-                    <button type="button" class="btn btn-lg btn-primary js-auth-only d-none" data-book-type="Verkauft" data-product-id="<?php echo htmlspecialchars((string)($item['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">Verkauf</button>
-                    <button type="button" class="btn btn-lg btn-outline-primary js-auth-only d-none" data-book-type="Gutschein" data-product-id="<?php echo htmlspecialchars((string)($item['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">Gutschein</button>
-                    <button type="button" class="btn btn-lg btn-outline-success js-auth-only d-none" data-book-type="Freigetraenk" data-product-id="<?php echo htmlspecialchars((string)($item['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">Freigetraenk</button>
+                    <div class="d-flex flex-wrap gap-2 justify-content-end">
+                      <button
+                        type="button"
+                        class="btn btn-lg btn-outline-secondary"
+                        data-item-info
+                        data-item-name="<?php echo htmlspecialchars((string)($item['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                        data-item-category="<?php echo htmlspecialchars((string)($category['name'] ?? $category['label'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                        data-item-price="<?php echo htmlspecialchars((string)($item['price'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                        data-item-tags="<?php echo htmlspecialchars($tags_text, ENT_QUOTES, 'UTF-8'); ?>"
+                        data-item-ingredients="<?php echo htmlspecialchars($ingredients_text, ENT_QUOTES, 'UTF-8'); ?>"
+                        data-item-preparation="<?php echo htmlspecialchars($preparation_text, ENT_QUOTES, 'UTF-8'); ?>"
+                      >
+                        <i class="bi bi-info-circle me-2" aria-hidden="true"></i>
+                        <span data-i18n="pos.info">Info</span>
+                      </button>
+                      <button type="button" class="btn btn-lg btn-primary js-auth-only d-none" data-book-type="Verkauft" data-product-id="<?php echo htmlspecialchars((string)($item['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                        <i class="bi bi-cart-plus me-2" aria-hidden="true"></i>
+                        <span data-i18n="pos.sell">Verkauf</span>
+                      </button>
+                      <button type="button" class="btn btn-lg btn-outline-primary js-auth-only d-none" data-book-type="Gutschein" data-product-id="<?php echo htmlspecialchars((string)($item['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                        <i class="bi bi-ticket-perforated me-2" aria-hidden="true"></i>
+                        <span data-i18n="pos.voucher">Gutschein</span>
+                      </button>
+                      <button type="button" class="btn btn-lg btn-outline-success js-auth-only d-none" data-book-type="Freigetraenk" data-product-id="<?php echo htmlspecialchars((string)($item['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                        <i class="bi bi-gift me-2" aria-hidden="true"></i>
+                        <span data-i18n="pos.free">Freigetraenk</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -378,9 +423,18 @@ $modals = <<<HTML
         <div id="accessStatus" class="text-secondary small mt-2" role="status" aria-live="polite" data-i18n="index.modal.status.none">Kein Token gespeichert</div>
       </div>
       <div class="modal-footer">
-        <button id="accessClear" class="btn btn-outline-secondary" type="button" data-i18n="common.delete">Loeschen</button>
-        <button id="accessSave" class="btn btn-primary" type="button" data-i18n="common.save">Speichern</button>
-        <button id="accessClose" class="btn btn-link" type="button" data-bs-dismiss="modal" data-i18n="common.close">Schliessen</button>
+        <button id="accessClear" class="btn btn-outline-secondary" type="button">
+          <i class="bi bi-trash me-1" aria-hidden="true"></i>
+          <span data-i18n="common.delete">Loeschen</span>
+        </button>
+        <button id="accessSave" class="btn btn-primary" type="button">
+          <i class="bi bi-check2 me-1" aria-hidden="true"></i>
+          <span data-i18n="common.save">Speichern</span>
+        </button>
+        <button id="accessClose" class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">
+          <i class="bi bi-x-lg me-1" aria-hidden="true"></i>
+          <span data-i18n="common.close">Schliessen</span>
+        </button>
       </div>
     </div>
   </div>
@@ -516,7 +570,50 @@ JS
 (() => {
   const ACCESS_TOKEN_KEY = "kekcounter.accessToken";
   const ADMIN_TOKEN_KEY = "kekcounter.adminToken";
+  const QUEUE_KEY = "kekcounter.bookingQueue";
   const stornoButton = document.getElementById("stornoButton");
+  const queueBadge = document.getElementById("queueBadge");
+
+  function getQueue() {
+    try {
+      return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveQueue(queue) {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+    updateQueueUI();
+  }
+
+  function updateQueueUI() {
+    if (!queueBadge) return;
+    const queue = getQueue();
+    if (queue.length > 0) {
+      queueBadge.textContent = `Queue: ${queue.length}`;
+      queueBadge.classList.remove("d-none");
+    } else {
+      queueBadge.classList.add("d-none");
+    }
+    updateStornoButtonState();
+  }
+
+  function updateStornoButtonState() {
+    if (!stornoButton) return;
+    const queue = getQueue();
+    const isOffline = !navigator.onLine;
+    const hasQueue = queue.length > 0;
+    stornoButton.disabled = isOffline || hasQueue;
+    
+    let title = "";
+    if (isOffline) {
+      title = t("pos.storno.error.offline");
+    } else if (hasQueue) {
+      title = t("pos.storno.error.queueNotEmpty");
+    }
+    stornoButton.title = title;
+  }
 
   function getTokenHeaders() {
     const headers = { "X-Requested-With": "fetch" };
@@ -534,7 +631,36 @@ JS
     return headers;
   }
 
-  async function postBooking(action, payload) {
+  let isSyncing = false;
+  async function syncQueue() {
+    if (isSyncing || !navigator.onLine) return;
+    const queue = getQueue();
+    if (queue.length === 0) return;
+
+    isSyncing = true;
+    const remaining = [];
+    for (const item of queue) {
+      try {
+        await postBooking(item.action, item.payload, true);
+      } catch (e) {
+        remaining.push(item);
+      }
+    }
+    saveQueue(remaining);
+    isSyncing = false;
+  }
+
+  async function postBooking(action, payload, isSync = false) {
+    if (!navigator.onLine && !isSync) {
+      const queue = getQueue();
+      queue.push({ action, payload, ts: new Date().toISOString() });
+      saveQueue(queue);
+      if (window.kekErrors?.show) {
+        window.kekErrors.show(t("pos.book.offline"), "info");
+      }
+      return { ok: true, queued: true };
+    }
+
     const response = await fetch(`?action=${action}`, {
       method: "POST",
       cache: "no-store",
@@ -546,7 +672,7 @@ JS
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data?.error || "Request failed");
+      throw new Error(data?.error || t("pos.book.error"));
     }
     return data;
   }
@@ -563,12 +689,15 @@ JS
     }
     button.disabled = true;
     try {
-      await postBooking("book", { productId, type });
+      const res = await postBooking("book", { productId, type });
+      if (res.ok && !res.queued && window.kekErrors?.show) {
+        window.kekErrors.show(t("pos.book.success"), "success");
+      }
     } catch (error) {
       if (window.kekErrors?.show) {
-        window.kekErrors.show(error.message || "Buchung fehlgeschlagen");
+        window.kekErrors.show(error.message || t("pos.book.error"));
       } else {
-        alert(error.message || "Buchung fehlgeschlagen");
+        alert(error.message || t("pos.book.error"));
       }
     } finally {
       button.disabled = false;
@@ -577,25 +706,74 @@ JS
 
   if (stornoButton) {
     stornoButton.addEventListener("click", async () => {
+      const queue = getQueue();
+      if (!navigator.onLine) {
+        if (window.kekErrors?.show) {
+          window.kekErrors.show(t("pos.storno.error.offline"), "warning");
+        } else {
+          alert(t("pos.storno.error.offline"));
+        }
+        return;
+      }
+      if (queue.length > 0) {
+        if (window.kekErrors?.show) {
+          window.kekErrors.show(t("pos.storno.error.queueNotEmpty"), "warning");
+        } else {
+          alert(t("pos.storno.error.queueNotEmpty"));
+        }
+        return;
+      }
       stornoButton.disabled = true;
       try {
         await postBooking("storno", {});
+        if (window.kekErrors?.show) {
+          window.kekErrors.show(t("pos.storno.success"), "success");
+        }
       } catch (error) {
         if (window.kekErrors?.show) {
-          window.kekErrors.show(error.message || "Storno fehlgeschlagen");
+          window.kekErrors.show(error.message || t("pos.storno.error.generic"));
         } else {
-          alert(error.message || "Storno fehlgeschlagen");
+          alert(error.message || t("pos.storno.error.generic"));
         }
       } finally {
-        stornoButton.disabled = false;
+        updateStornoButtonState();
       }
     });
   }
+
+  updateQueueUI();
+  window.addEventListener("online", () => {
+    syncQueue();
+    updateStornoButtonState();
+  });
+  window.addEventListener("offline", updateStornoButtonState);
+  setInterval(syncQueue, 30000);
+})();
+JS
+    ,
+    <<<'JS'
+(() => {
+  const searchInput = document.getElementById('posSearch');
+  if (!searchInput) return;
+
+  searchInput.addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase().trim();
+    const items = document.querySelectorAll('#pane-all .js-searchable-item');
+
+    items.forEach(item => {
+      const searchTerm = item.getAttribute('data-search-term') || '';
+      if (term === '' || searchTerm.includes(term)) {
+        item.classList.remove('d-none');
+      } else {
+        item.classList.add('d-none');
+      }
+    });
+  });
 })();
 JS
 ];
 
-render_layout([
+$layoutManager->render([
     'title' => 'Kek - Checkout',
     'description' => 'Checkout Uebersicht und Steuerung.',
     'header' => $header,

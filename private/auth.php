@@ -1,168 +1,84 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use KekCheckout\Auth;
+
 /**
- * Generate a CSRF token and store it in the session.
+ * @deprecated Use KekCheckout\Auth::getCsrfToken()
  */
 function get_csrf_token(): string
 {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
-    if (empty($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    }
-    return $_SESSION['csrf_token'];
+    $auth = new Auth('', '', '');
+    return $auth->getCsrfToken();
 }
 
 /**
- * Verify a CSRF token.
+ * @deprecated Use KekCheckout\Auth::verifyCsrfToken()
  */
 function verify_csrf_token(?string $token): bool
 {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
-    if (empty($_SESSION['csrf_token']) || empty($token)) {
-        return false;
-    }
-    return hash_equals($_SESSION['csrf_token'], $token);
+    $auth = new Auth('', '', '');
+    return $auth->verifyCsrfToken($token);
 }
 
 /**
- * Read a token from env or fallback file path.
+ * @deprecated Use KekCheckout\Auth::loadAdminToken()
  */
 function load_token(string $env_name, string $path): string
 {
-    $env = getenv($env_name);
-    if ($env !== false && $env !== '') {
-        return trim($env);
-    }
-    if (is_file($path)) {
-        $token = trim((string)file_get_contents($path));
-        if ($token !== '') {
-            return $token;
-        }
-    }
-    return '';
+    $auth = new Auth('', '', $path);
+    return $auth->loadAdminToken();
 }
 
 /**
- * Normalize a display label for access tokens.
+ * @deprecated Use KekCheckout\Auth::normalizeAccessLabel()
  */
 function normalize_access_label(string $value, int $max): string
 {
-    $value = trim($value);
-    $value = preg_replace('/\s+/', ' ', $value) ?? $value;
-    if ($value === '') {
-        return '';
-    }
-    return substr($value, 0, $max);
+    $auth = new Auth('', '', '');
+    return $auth->normalizeAccessLabel($value, $max);
 }
 
 /**
- * Normalize a token string for storage.
+ * @deprecated Use KekCheckout\Auth::normalizeAccessTokenValue()
  */
 function normalize_access_token_value(string $value, int $max): string
 {
-    $value = trim($value);
-    if ($value === '') {
-        return '';
-    }
-    return substr($value, 0, $max);
+    $auth = new Auth('', '', '');
+    return $auth->normalizeAccessTokenValue($value, $max);
 }
 
 /**
- * Create a simple ASCII id from a label.
+ * @deprecated Use KekCheckout\Auth::slugifyId()
  */
 function access_slugify_id(string $value): string
 {
-    $value = strtolower($value);
-    $value = preg_replace('/[^a-z0-9]+/', '-', $value) ?? $value;
-    $value = trim($value, '-');
-    return $value;
+    $auth = new Auth('', '', '');
+    return $auth->slugifyId($value);
 }
 
 /**
- * Load a list of access tokens (optional legacy fallback).
+ * @deprecated Use KekCheckout\Auth::loadAccessTokens()
  */
 function load_access_tokens(string $path, string $legacy_path = ''): array
 {
-    $tokens = [];
-    if (is_file($path)) {
-        $raw = file_get_contents($path);
-        $data = json_decode((string)$raw, true);
-        if (is_array($data)) {
-            $tokens = $data;
-        }
-    } elseif ($legacy_path !== '' && is_file($legacy_path)) {
-        $legacy = normalize_access_token_value((string)file_get_contents($legacy_path), 160);
-        if ($legacy !== '') {
-            return [[
-                'id' => 'default',
-                'name' => 'Default',
-                'token' => $legacy,
-                'active' => true,
-            ]];
-        }
-    }
-
-    $normalized = [];
-    $ids = [];
-    foreach ($tokens as $entry) {
-        if (!is_array($entry)) {
-            continue;
-        }
-        $name = normalize_access_label((string)($entry['name'] ?? ''), 40);
-        $token = normalize_access_token_value((string)($entry['token'] ?? ''), 160);
-        if ($token === '') {
-            continue;
-        }
-        $id_source = (string)($entry['id'] ?? $name);
-        $base_id = access_slugify_id($id_source);
-        if ($base_id === '') {
-            $base_id = 'key';
-        }
-        $id = $base_id;
-        $suffix = 2;
-        while (in_array($id, $ids, true)) {
-            $id = $base_id . '-' . $suffix;
-            $suffix++;
-        }
-        $ids[] = $id;
-        if ($name === '') {
-            $name = $id;
-        }
-        $normalized[] = [
-            'id' => $id,
-            'name' => $name,
-            'token' => $token,
-            'active' => !empty($entry['active']),
-        ];
-    }
-    return $normalized;
+    $auth = new Auth($path, $legacy_path, '');
+    return $auth->loadAccessTokens();
 }
 
 /**
- * Persist access tokens to disk.
+ * @deprecated Use KekCheckout\Auth::saveAccessTokens()
  */
 function save_access_tokens(string $path, array $tokens): bool
 {
-    $dir = dirname($path);
-    if (!is_dir($dir)) {
-        if (!@mkdir($dir, 0770, true) && !is_dir($dir)) {
-            return false;
-        }
-    }
-    $payload = json_encode($tokens, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
-    if ($payload === false) {
-        return false;
-    }
-    return file_put_contents($path, $payload, LOCK_EX) !== false;
+    $auth = new Auth($path, '', '');
+    return $auth->saveAccessTokens($tokens);
 }
 
 /**
- * Check if any access tokens are configured.
+ * @deprecated
  */
 function access_tokens_empty($access_tokens): bool
 {
@@ -173,7 +89,7 @@ function access_tokens_empty($access_tokens): bool
 }
 
 /**
- * Check if a token matches any active access token.
+ * @deprecated
  */
 function access_tokens_match(array $access_tokens, string $candidate): bool
 {
@@ -196,7 +112,7 @@ function access_tokens_match(array $access_tokens, string $candidate): bool
 }
 
 /**
- * Validate origin or referrer against the current host.
+ * @deprecated
  */
 function is_same_origin(): bool
 {
@@ -230,21 +146,16 @@ function is_same_origin(): bool
 }
 
 /**
- * Extract a bearer token from the Authorization header.
+ * @deprecated Use KekCheckout\Auth::getBearerToken()
  */
 function get_bearer_token(): string
 {
-    if (!isset($_SERVER['HTTP_AUTHORIZATION'])) {
-        return '';
-    }
-    if (preg_match('/^Bearer\s+(.*)$/i', $_SERVER['HTTP_AUTHORIZATION'], $matches)) {
-        return trim($matches[1]);
-    }
-    return '';
+    $auth = new Auth('', '', '');
+    return $auth->getBearerToken();
 }
 
 /**
- * Validate access/admin tokens against provided headers.
+ * @deprecated
  */
 function is_valid_token(
     $access_tokens,
@@ -286,7 +197,7 @@ function is_valid_token(
 }
 
 /**
- * Validate request method, origin, and tokens for access/admin usage.
+ * @deprecated
  */
 function authorize_any_token_request($access_tokens, string $admin_token): array
 {
@@ -341,7 +252,7 @@ function authorize_any_token_request($access_tokens, string $admin_token): array
 }
 
 /**
- * Require a valid access or admin token for API requests.
+ * @deprecated
  */
 function require_any_token($access_tokens, string $admin_token): void
 {
@@ -352,7 +263,7 @@ function require_any_token($access_tokens, string $admin_token): void
 }
 
 /**
- * Require a valid admin token for API requests.
+ * @deprecated
  */
 function require_admin_token(string $admin_token): void
 {

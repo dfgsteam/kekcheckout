@@ -3,13 +3,17 @@ declare(strict_types=1);
 
 date_default_timezone_set('Europe/Berlin');
 
-require_once __DIR__ . '/private/layout.php';
-require_once __DIR__ . '/private/sales_lib.php';
 require_once __DIR__ . '/private/bootstrap.php';
 
-$booking_path = __DIR__ . '/private/bookings.csv';
-$settings_path = __DIR__ . '/private/settings.json';
-$settings = load_settings($settings_path);
+use KekCheckout\Settings;
+use KekCheckout\SalesManager;
+use KekCheckout\Layout;
+
+$settingsManager = new Settings(__DIR__ . '/private/settings.json');
+$salesManager = new SalesManager(__DIR__ . '/private/bookings.csv');
+$layoutManager = new Layout();
+
+$settings = $settingsManager->getAll();
 $bucket_minutes = (int)($settings['tick_minutes'] ?? 15);
 if ($bucket_minutes <= 0) {
     $bucket_minutes = 15;
@@ -43,8 +47,8 @@ $cashier_totals = [];
 $revenue_labels = [];
 $revenue_series = [];
 
-if (is_file($booking_path)) {
-    $rows = sales_read_csv($booking_path);
+if (is_file(__DIR__ . '/private/bookings.csv')) {
+    $rows = $salesManager->readCsv();
     if ($rows) {
         $headers = array_shift($rows);
         if (is_array($headers)) {
@@ -385,7 +389,7 @@ ob_start();
 <section class="card shadow-sm border-0 mt-4">
   <div class="card-body">
     <h2 class="h5 mb-3">Buchungslog</h2>
-    <?php if (!is_file($booking_path)) { ?>
+    <?php if (!is_file(__DIR__ . '/private/bookings.csv')) { ?>
       <p class="text-secondary mb-0">Kein Buchungslog gefunden. Datei fehlt.</p>
     <?php } elseif (!$booking_rows) { ?>
       <p class="text-secondary mb-0">Keine Buchungen vorhanden.</p>
@@ -435,15 +439,14 @@ $footer = <<<HTML
 </footer>
 HTML;
 
-render_layout([
+$layoutManager->render([
     'title' => 'Kek - Checkout Analyse',
     'description' => 'Analyse fuer den Checkout.',
     'header' => $header,
     'content' => $content,
-    'footer' => $footer,
-    'head_extra' => '<meta name="robots" content="noindex, nofollow">',
+    'footer_extra' => $footer,
+    'header_extra' => '<meta name="robots" content="noindex, nofollow">',
     'manifest' => '',
-    'include_chart_js' => true,
     'inline_scripts' => [
         <<<JS
 (() => {

@@ -1,0 +1,23 @@
+# Dependencies
+/vendor/
+
+# Private data and configuration
+/private/.access_token
+/private/.admin_token
+/private/.event_name
+/private/access_tokens.json
+/private/bookings.csv
+/private/request.log
+/private/visitors.csv
+
+# Archives
+/archives/*.csv
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

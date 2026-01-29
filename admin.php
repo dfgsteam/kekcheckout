@@ -12,79 +12,23 @@ $settings_path = __DIR__ . '/private/settings.json';
 $event_name_path = __DIR__ . '/private/.event_name';
 $log_path = __DIR__ . '/private/request.log';
 require_once __DIR__ . '/private/bootstrap.php';
-require_once __DIR__ . '/private/auth.php';
 
-/**
- * Persist validated settings to disk and return the saved values.
- */
-function save_settings(string $path, array $payload): array
-{
-    $defaults = [
-        'threshold' => 150,
-        'max_points' => 10000,
-        'chart_max_points' => 2000,
-        'window_hours' => 3,
-        'tick_minutes' => 15,
-        'capacity_default' => 150,
-        'storno_max_minutes' => 3,
-        'storno_max_back' => 5,
-    ];
+use KekCheckout\Settings;
+use KekCheckout\Logger;
+use KekCheckout\Auth;
+use KekCheckout\MenuManager;
+use KekCheckout\SalesManager;
+use KekCheckout\Layout;
+use KekCheckout\Utils;
 
-    $settings = $defaults;
-    foreach ($defaults as $key => $value) {
-        if (isset($payload[$key]) && is_numeric($payload[$key])) {
-            $num = (int)$payload[$key];
-            if ($num > 0) {
-                $settings[$key] = $num;
-            }
-        }
-    }
+$settingsManager = new Settings($settings_path);
+$logger = new Logger($log_path);
+$auth = new Auth($access_tokens_path, $legacy_access_token_path, $admin_token_path);
+$menuManager = new MenuManager(__DIR__ . '/private/menu_categories.json', __DIR__ . '/private/menu_items.json');
+$salesManager = new SalesManager($csv_path);
+$layoutManager = new Layout();
 
-    file_put_contents(
-        $path,
-        json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-        LOCK_EX
-    );
-
-    return $settings;
-}
-
-/**
- * Normalize and persist the event name to disk.
- */
-function save_event_name(string $path, string $name): string
-{
-    $clean = trim($name);
-    $clean = preg_replace('/\s+/', ' ', $clean) ?? $clean;
-    $clean = substr($clean, 0, 80);
-    if ($clean === '') {
-        if (is_file($path)) {
-            @unlink($path);
-        }
-        return '';
-    }
-    file_put_contents($path, $clean, LOCK_EX);
-    return $clean;
-}
-
-/**
- * Build a safe filename slug from an event name.
- */
-function slugify_event_name(string $name): string
-{
-    $slug = strtolower($name);
-    $slug = preg_replace('/[^a-z0-9]+/i', '-', $slug) ?? '';
-    $slug = trim($slug, '-');
-    if ($slug === '') {
-        return '';
-    }
-    return substr($slug, 0, 40);
-}
-
-
-
-
-$admin_token = load_token('KEKCOUNTER_ADMIN_TOKEN', $admin_token_path);
+$admin_token = $auth->loadAdminToken();
 $action = $_GET['action'] ?? null;
 if ($action !== null) {
     require_admin_token($admin_token);
@@ -95,20 +39,20 @@ if ($action !== null) {
     if (!$is_get && !in_array($action, $safe_actions, true)) {
         $body = read_json_body();
         $csrf_token = $body['csrf_token'] ?? ($_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
-        if (!verify_csrf_token($csrf_token)) {
+        if (!$auth->verifyCsrfToken($csrf_token)) {
             send_json_error(403, 'Invalid CSRF token', $log_path, 'admin:' . $action);
         }
     }
 
     if ($action === 'restart') {
         header('Content-Type: application/json; charset=utf-8');
-        ensure_archive_dir($archive_dir);
+        Utils::ensureDir($archive_dir);
 
         $archived = false;
         $archive_name = null;
         if (is_file($csv_path) && filesize($csv_path) > 0) {
-            $event_name = load_event_name($event_name_path);
-            $slug = slugify_event_name($event_name);
+            $event_name = $settingsManager->loadEventName($event_name_path);
+            $slug = Utils::slugify($event_name);
             if ($slug !== '') {
                 $archive_name = 'visitors-' . $slug . '-' . date('Ymd-His') . '.csv';
             } else {
@@ -135,7 +79,7 @@ if ($action !== null) {
             'archived' => $archived,
             'archiveName' => $archive_name,
         ];
-        log_event($log_path, 'admin:restart', 200, $payload);
+        $logger->log('admin:restart', 200, $payload);
         echo json_encode($payload);
         exit;
     }
@@ -143,11 +87,11 @@ if ($action !== null) {
     if ($action === 'set_access_token') {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
-        $token = normalize_access_token_value((string)($payload['token'] ?? ($_POST['token'] ?? '')), 160);
+        $token = $auth->normalizeAccessTokenValue((string)($payload['token'] ?? ($_POST['token'] ?? '')), 160);
         if ($token === '') {
             send_json_error(400, 'Token missing', $log_path, 'admin:' . $action);
         }
-        $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
+        $tokens = $auth->loadAccessTokens();
         $updated = false;
         foreach ($tokens as $index => $entry) {
             if (($entry['id'] ?? '') === 'default') {
@@ -166,10 +110,10 @@ if ($action !== null) {
                 'active' => true,
             ];
         }
-        if (!save_access_tokens($access_tokens_path, $tokens)) {
+        if (!$auth->saveAccessTokens($tokens)) {
             send_json_error(500, 'Save failed', $log_path, 'admin:' . $action);
         }
-        log_event($log_path, 'admin:set_access_token', 200);
+        $logger->log('admin:set_access_token', 200);
         echo json_encode(['ok' => true]);
         exit;
     }
@@ -747,14 +691,13 @@ $footer = <<<HTML
 </footer>
 HTML;
 
-render_layout([
+$layoutManager->render([
     'title' => 'Kek-Counter Admin',
-    'title_i18n' => 'title.admin',
     'manifest' => '',
     'header' => $header,
     'content' => $content,
-    'footer' => $footer,
-    'head_extra' => '<meta name="robots" content="noindex, nofollow">',
+    'footer_extra' => $footer,
+    'header_extra' => '<meta name="robots" content="noindex, nofollow">',
     'scripts' => [
         'assets/admin.js',
     ],

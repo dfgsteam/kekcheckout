@@ -1,97 +1,28 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use KekCheckout\Settings;
+use KekCheckout\Logger;
+use KekCheckout\Utils;
+
 /**
- * Load numeric settings with defaults from a JSON file.
+ * @deprecated Use KekCheckout\Settings::load()
  */
 function load_settings(string $path): array
 {
-    $defaults = [
-        'threshold' => 150,
-        'max_points' => 10000,
-        'chart_max_points' => 2000,
-        'window_hours' => 3,
-        'tick_minutes' => 15,
-        'capacity_default' => 150,
-        'storno_max_minutes' => 3,
-        'storno_max_back' => 5,
-    ];
-
-    if (!is_file($path)) {
-        return $defaults;
-    }
-
-    $raw = file_get_contents($path);
-    if ($raw === false || $raw === '') {
-        return $defaults;
-    }
-
-    $data = json_decode($raw, true);
-    if (!is_array($data)) {
-        return $defaults;
-    }
-
-    $settings = $defaults;
-    foreach ($defaults as $key => $value) {
-        if (isset($data[$key]) && is_numeric($data[$key])) {
-            $num = (int)$data[$key];
-            if ($num > 0) {
-                $settings[$key] = $num;
-            }
-        }
-    }
-
-    return $settings;
+    $mgr = new Settings($path);
+    return $mgr->getAll();
 }
 
 /**
- * Append a structured log entry to the request log file.
+ * @deprecated Use KekCheckout\Logger::log()
  */
 function log_event(string $path, string $action, int $status, array $extra = []): void
 {
-    $entry = array_merge([
-        'ts' => date('c'),
-        'action' => $action,
-        'status' => $status,
-        'ip' => $_SERVER['REMOTE_ADDR'] ?? '',
-        'ua' => $_SERVER['HTTP_USER_AGENT'] ?? '',
-    ], $extra);
-
-    $line = json_encode($entry, JSON_UNESCAPED_SLASHES);
-    if ($line === false) {
-        return;
-    }
-
-    $dir = dirname($path);
-    if (!is_dir($dir)) {
-        if (!@mkdir($dir, 0770, true) && !is_dir($dir)) {
-            return;
-        }
-    }
-
-    $fp = @fopen($path, 'c+');
-    if ($fp === false) {
-        return;
-    }
-
-    flock($fp, LOCK_EX);
-    rewind($fp);
-    $content = stream_get_contents($fp);
-    $lines = [];
-    if ($content !== false && $content !== '') {
-        $lines = array_filter(explode("\n", trim($content)), 'strlen');
-    }
-    $lines[] = $line;
-    $max_lines = 200;
-    if (count($lines) > $max_lines) {
-        $lines = array_slice($lines, -$max_lines);
-    }
-    rewind($fp);
-    ftruncate($fp, 0);
-    fwrite($fp, implode("\n", $lines) . "\n");
-    fflush($fp);
-    flock($fp, LOCK_UN);
-    fclose($fp);
+    $logger = new Logger($path);
+    $logger->log($action, $status, $extra);
 }
 
 /**
@@ -109,31 +40,20 @@ function send_json_error(int $code, string $message, string $log_path = '', stri
 }
 
 /**
- * Read the saved event name from disk.
+ * @deprecated Use KekCheckout\Settings::loadEventName()
  */
 function load_event_name(string $path): string
 {
-    if (!is_file($path)) {
-        return '';
-    }
-    $name = trim((string)file_get_contents($path));
-    if ($name === '') {
-        return '';
-    }
-    $name = preg_replace('/\s+/', ' ', $name) ?? $name;
-    return substr($name, 0, 80);
+    $mgr = new Settings('');
+    return $mgr->loadEventName($path);
 }
 
 /**
- * Ensure the archive directory exists.
+ * @deprecated Use KekCheckout\Utils::ensureDir()
  */
 function ensure_archive_dir(string $dir): void
 {
-    if (!is_dir($dir)) {
-        if (!@mkdir($dir, 0770, true) && !is_dir($dir)) {
-            return;
-        }
-    }
+    Utils::ensureDir($dir);
 }
 
 /**
@@ -147,14 +67,11 @@ function read_json_body(): array
 }
 
 /**
- * Sanitize a string to be safe for display or storage.
+ * @deprecated Use KekCheckout\Utils::sanitizeString()
  */
 function sanitize_string(string $value, int $max_len = 255): string
 {
-    $value = trim($value);
-    $value = preg_replace('/\s+/', ' ', $value) ?? $value;
-    $value = htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    return mb_substr($value, 0, $max_len);
+    return Utils::sanitizeString($value, $max_len);
 }
 
 /**

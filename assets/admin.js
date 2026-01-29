@@ -17,10 +17,10 @@ const eventNameSave = document.getElementById("eventNameSave");
 const eventNameStatus = document.getElementById("eventNameStatus");
 
 const downloadLatest = document.getElementById("downloadLatest");
-const refreshArchives = document.getElementById("refreshArchives");
-const archiveStatus = document.getElementById("archiveStatus");
-const archiveList = document.getElementById("archiveList");
-const archiveSearchInput = document.getElementById("archiveSearch");
+const refreshArchives = document.getElementById("adminArchiveRefresh");
+const archiveStatus = document.getElementById("adminArchiveStatus");
+const archiveList = document.getElementById("adminArchiveList");
+const archiveSearchInput = document.getElementById("adminArchiveSearch");
 const archiveSortSelect = document.getElementById("archiveSort");
 const logRefresh = document.getElementById("logRefresh");
 const logDownload = document.getElementById("logDownload");
@@ -1154,12 +1154,12 @@ function renderAccessTokens(tokens) {
     saveBtn.type = "button";
     saveBtn.className = "btn btn-outline-primary btn-sm";
     saveBtn.dataset.action = "save-access-token";
-    saveBtn.textContent = "Speichern";
+    saveBtn.innerHTML = `<i class="bi bi-check2 me-1" aria-hidden="true"></i>${t("common.save")}`;
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "btn btn-outline-danger btn-sm";
     deleteBtn.dataset.action = "delete-access-token";
-    deleteBtn.textContent = "Loeschen";
+    deleteBtn.innerHTML = `<i class="bi bi-trash me-1" aria-hidden="true"></i>${t("common.delete")}`;
     colActions.appendChild(saveBtn);
     colActions.appendChild(deleteBtn);
 

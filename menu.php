@@ -14,59 +14,36 @@ $log_path = __DIR__ . '/private/request.log';
 $categories_path = __DIR__ . '/private/menu_categories.json';
 $items_path = __DIR__ . '/private/menu_items.json';
 require_once __DIR__ . '/private/bootstrap.php';
-require_once __DIR__ . '/private/auth.php';
-require_once __DIR__ . '/private/menu_lib.php';
 
+use KekCheckout\Settings;
+use KekCheckout\Logger;
+use KekCheckout\Auth;
+use KekCheckout\MenuManager;
+use KekCheckout\Layout;
+use KekCheckout\Utils;
 
-/**
- * Send a JSON error response and stop execution.
- */
-function send_json_error(int $code, string $message): void
-{
-    global $log_path, $action;
-    if ($log_path !== '') {
-        $log_action = $action ? 'admin:' . $action : 'admin';
-        log_event($log_path, $log_action, $code, ['error' => $message]);
-    }
-    header('Content-Type: application/json; charset=utf-8');
-    http_response_code($code);
-    echo json_encode(['error' => $message]);
-    exit;
-}
+$settingsManager = new Settings($settings_path);
+$logger = new Logger($log_path);
+$auth = new Auth($access_tokens_path, $legacy_access_token_path, $admin_token_path);
+$menuManager = new MenuManager($categories_path, $items_path);
+$layoutManager = new Layout();
 
-/**
- * Require same-origin POST requests for public reads.
- */
-function require_menu_read(): void
-{
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        send_json_error(405, 'Method not allowed');
-    }
-    if (!is_same_origin()) {
-        send_json_error(403, 'Forbidden');
-    }
-    $requested_with = $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '';
-    if ($requested_with !== 'fetch') {
-        send_json_error(403, 'Forbidden');
-    }
-}
+$menuManager->ensureSeed();
 
-menu_ensure_seed($categories_path, $items_path);
-
-$admin_token = load_token('KEKCOUNTER_ADMIN_TOKEN', $admin_token_path);
+$admin_token = $auth->loadAdminToken();
 $action = $_GET['action'] ?? null;
 if ($action !== null) {
     require_admin_token($admin_token);
 
     if ($action === 'restart') {
         header('Content-Type: application/json; charset=utf-8');
-        ensure_archive_dir($archive_dir);
+        Utils::ensureDir($archive_dir);
 
         $archived = false;
         $archive_name = null;
         if (is_file($csv_path) && filesize($csv_path) > 0) {
-            $event_name = load_event_name($event_name_path);
-            $slug = slugify_event_name($event_name);
+            $event_name = $settingsManager->loadEventName($event_name_path);
+            $slug = Utils::slugify($event_name);
             if ($slug !== '') {
                 $archive_name = 'visitors-' . $slug . '-' . date('Ymd-His') . '.csv';
             } else {
@@ -93,7 +70,7 @@ if ($action !== null) {
             'archived' => $archived,
             'archiveName' => $archive_name,
         ];
-        log_event($log_path, 'admin:restart', 200, $payload);
+        $logger->log('admin:restart', 200, $payload);
         echo json_encode($payload);
         exit;
     }
@@ -101,11 +78,11 @@ if ($action !== null) {
     if ($action === 'set_access_token') {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
-        $token = normalize_access_token_value((string)($payload['token'] ?? ($_POST['token'] ?? '')), 160);
+        $token = $auth->normalizeAccessTokenValue((string)($payload['token'] ?? ($_POST['token'] ?? '')), 160);
         if ($token === '') {
             send_json_error(400, 'Token missing');
         }
-        $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
+        $tokens = $auth->loadAccessTokens();
         $updated = false;
         foreach ($tokens as $index => $entry) {
             if (($entry['id'] ?? '') === 'default') {
@@ -124,10 +101,10 @@ if ($action !== null) {
                 'active' => true,
             ];
         }
-        if (!save_access_tokens($access_tokens_path, $tokens)) {
+        if (!$auth->saveAccessTokens($tokens)) {
             send_json_error(500, 'Save failed');
         }
-        log_event($log_path, 'admin:set_access_token', 200);
+        $logger->log('admin:set_access_token', 200);
         echo json_encode(['ok' => true]);
         exit;
     }
@@ -140,14 +117,14 @@ if ($action !== null) {
             send_json_error(400, 'Token missing');
         }
         file_put_contents($admin_token_path, $token, LOCK_EX);
-        log_event($log_path, 'admin:set_admin_token', 200);
+        $logger->log('admin:set_admin_token', 200);
         echo json_encode(['ok' => true]);
         exit;
     }
 
     if ($action === 'get_event_name') {
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['eventName' => load_event_name($event_name_path)]);
+        echo json_encode(['eventName' => $settingsManager->loadEventName($event_name_path)]);
         exit;
     }
 
@@ -155,32 +132,29 @@ if ($action !== null) {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
         $name = (string)($payload['name'] ?? ($_POST['name'] ?? ''));
-        $saved = save_event_name($event_name_path, $name);
-        log_event($log_path, 'admin:set_event_name', 200, ['name' => $saved]);
+        $saved = $settingsManager->saveEventName($event_name_path, $name);
+        $logger->log('admin:set_event_name', 200, ['name' => $saved]);
         echo json_encode(['ok' => true, 'eventName' => $saved]);
         exit;
     }
 
     if ($action === 'get_menu') {
         header('Content-Type: application/json; charset=utf-8');
-        require_menu_read();
-        echo json_encode(menu_get_menu($categories_path, $items_path));
+        echo json_encode($menuManager->getMenu());
         exit;
     }
 
     if ($action === 'add_category') {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
-        $result = menu_add_category(
-            $categories_path,
-            $items_path,
+        $result = $menuManager->addCategory(
             (string)($payload['name'] ?? ''),
             (bool)($payload['active'] ?? false)
         );
         if (!$result['ok']) {
             send_json_error(400, $result['error'] ?? 'Save failed');
         }
-        $menu = menu_get_menu($categories_path, $items_path);
+        $menu = $menuManager->getMenu();
         echo json_encode(['ok' => true, 'category' => $result['category'] ?? [], 'menu' => $menu]);
         exit;
     }
@@ -188,9 +162,7 @@ if ($action !== null) {
     if ($action === 'add_item') {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
-        $result = menu_add_item(
-            $categories_path,
-            $items_path,
+        $result = $menuManager->addItem(
             (string)($payload['categoryId'] ?? ''),
             (string)($payload['name'] ?? ''),
             (string)($payload['price'] ?? '0'),
@@ -202,7 +174,7 @@ if ($action !== null) {
         if (!$result['ok']) {
             send_json_error(400, $result['error'] ?? 'Save failed');
         }
-        $menu = menu_get_menu($categories_path, $items_path);
+        $menu = $menuManager->getMenu();
         echo json_encode(['ok' => true, 'item' => $result['item'] ?? [], 'menu' => $menu]);
         exit;
     }
@@ -210,9 +182,7 @@ if ($action !== null) {
     if ($action === 'update_category') {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
-        $result = menu_update_category(
-            $categories_path,
-            $items_path,
+        $result = $menuManager->updateCategory(
             (string)($payload['id'] ?? ''),
             (string)($payload['name'] ?? ''),
             (bool)($payload['active'] ?? false)
@@ -220,7 +190,7 @@ if ($action !== null) {
         if (!$result['ok']) {
             send_json_error(400, $result['error'] ?? 'Save failed');
         }
-        $menu = menu_get_menu($categories_path, $items_path);
+        $menu = $menuManager->getMenu();
         echo json_encode(['ok' => true, 'menu' => $menu]);
         exit;
     }
@@ -228,8 +198,7 @@ if ($action !== null) {
     if ($action === 'update_item') {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
-        $result = menu_update_item(
-            $items_path,
+        $result = $menuManager->updateItem(
             (string)($payload['id'] ?? ''),
             (string)($payload['name'] ?? ''),
             (string)($payload['price'] ?? '0'),
@@ -241,7 +210,7 @@ if ($action !== null) {
         if (!$result['ok']) {
             send_json_error(400, $result['error'] ?? 'Save failed');
         }
-        $menu = menu_get_menu($categories_path, $items_path);
+        $menu = $menuManager->getMenu();
         echo json_encode(['ok' => true, 'menu' => $menu]);
         exit;
     }
@@ -249,7 +218,7 @@ if ($action !== null) {
     if ($action === 'download_archive') {
         $payload = read_json_body();
         $name = trim((string)($payload['name'] ?? ($_POST['name'] ?? '')));
-        ensure_archive_dir($archive_dir);
+        Utils::ensureDir($archive_dir);
         $path = resolve_archive_path($archive_dir, $name);
         if ($path === null || !is_file($path)) {
             send_json_error(404, 'Not found');
@@ -265,7 +234,7 @@ if ($action !== null) {
         $payload = read_json_body();
         $name = trim((string)($payload['name'] ?? ($_POST['name'] ?? '')));
         $new_name_raw = (string)($payload['newName'] ?? ($_POST['newName'] ?? ''));
-        ensure_archive_dir($archive_dir);
+        Utils::ensureDir($archive_dir);
         $path = resolve_archive_path($archive_dir, $name);
         if ($path === null || !is_file($path)) {
             send_json_error(404, 'Not found');
@@ -300,7 +269,7 @@ if ($action !== null) {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
         $name = trim((string)($payload['name'] ?? ($_POST['name'] ?? '')));
-        ensure_archive_dir($archive_dir);
+        Utils::ensureDir($archive_dir);
         $path = resolve_archive_path($archive_dir, $name);
         if ($path === null || !is_file($path)) {
             send_json_error(404, 'Not found');
@@ -314,15 +283,16 @@ if ($action !== null) {
 
     if ($action === 'get_settings') {
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(load_settings($settings_path));
+        echo json_encode($settingsManager->getAll());
         exit;
     }
 
     if ($action === 'set_settings') {
         header('Content-Type: application/json; charset=utf-8');
         $payload = read_json_body();
-        $settings = save_settings($settings_path, $payload);
-        log_event($log_path, 'admin:set_settings', 200, ['settings' => $settings]);
+        $settingsManager->save($payload);
+        $settings = $settingsManager->getAll();
+        $logger->log('admin:set_settings', 200, ['settings' => $settings]);
         echo json_encode(['ok' => true, 'settings' => $settings]);
         exit;
     }
@@ -370,7 +340,7 @@ if ($action !== null) {
 
     if ($action === 'list_archives') {
         header('Content-Type: application/json; charset=utf-8');
-        ensure_archive_dir($archive_dir);
+        Utils::ensureDir($archive_dir);
         $files = glob($archive_dir . '/*.csv') ?: [];
         usort($files, fn($a, $b) => filemtime($b) <=> filemtime($a));
         $items = array_map(function (string $file): array {
@@ -392,7 +362,7 @@ if ($action !== null) {
             send_json_error(404, 'No archives');
         }
         $file = $files[0];
-        log_event($log_path, 'admin:download_latest', 200, ['name' => basename($file)]);
+        $logger->log('admin:download_latest', 200, ['name' => basename($file)]);
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . basename($file) . '"');
         readfile($file);
@@ -463,7 +433,7 @@ $modals = <<<HTML
 </div>
 HTML;
 
-$menu = menu_get_menu($categories_path, $items_path);
+$menu = $menuManager->getMenu();
 $menu_categories = is_array($menu['categories'] ?? null) ? $menu['categories'] : [];
 $menu_items = is_array($menu['items'] ?? null) ? $menu['items'] : [];
 $items_by_category = [];

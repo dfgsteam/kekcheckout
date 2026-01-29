@@ -1,15 +1,16 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/private/layout.php';
+require_once __DIR__ . '/private/bootstrap.php';
 
-$categories_path = __DIR__ . '/private/menu_categories.json';
-$items_path = __DIR__ . '/private/menu_items.json';
-require_once __DIR__ . '/private/menu_lib.php';
+use KekCheckout\MenuManager;
+use KekCheckout\Layout;
 
-menu_ensure_seed($categories_path, $items_path);
+$menuManager = new MenuManager(__DIR__ . '/private/menu_categories.json', __DIR__ . '/private/menu_items.json');
+$layoutManager = new Layout();
 
-$categories = menu_build_display_categories($categories_path, $items_path);
+$menuManager->ensureSeed();
+$categories = $menuManager->buildDisplayCategories();
 
 $header = '';
 
@@ -40,7 +41,10 @@ ob_start();
           <span class="btn-icon-text" data-i18n="nav.logout">Abmelden</span>
         </button>
       </div>
-      <button type="button" class="btn btn-lg btn-outline-danger js-auth-only d-none">Storno letzte Buchung</button>
+      <button type="button" class="btn btn-lg btn-outline-danger js-auth-only d-none w-100 w-sm-auto ms-lg-auto" id="stornoButton">
+        <i class="bi bi-arrow-counterclockwise me-2" aria-hidden="true"></i>
+        <span data-i18n="pos.storno.button">Storno letzte Buchung</span>
+      </button>
     </div>
     <ul class="nav nav-tabs" role="tablist">
       <?php foreach ($categories as $index => $category) {
@@ -58,7 +62,7 @@ ob_start();
             role="tab"
             aria-controls="<?php echo $pane_id; ?>"
             aria-selected="<?php echo $is_active ? 'true' : 'false'; ?>"
-          ><?php echo htmlspecialchars($category['label'], ENT_QUOTES, 'UTF-8'); ?></button>
+          ><?php echo htmlspecialchars((string)($category['name'] ?? $category['label'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></button>
         </li>
       <?php } ?>
     </ul>
@@ -76,12 +80,20 @@ ob_start();
                   <div class="flex-grow-1">
                     <div class="h5 mb-0"><?php echo htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8'); ?></div>
                   </div>
-                  <div class="d-flex flex-wrap align-items-center gap-2">
+                  <div class="d-flex flex-wrap align-items-center justify-content-lg-end gap-2 ms-lg-auto">
                     <span class="fw-semibold">€ <?php echo htmlspecialchars($item['price'], ENT_QUOTES, 'UTF-8'); ?></span>
-                    <button type="button" class="btn btn-lg btn-outline-danger js-auth-only d-none">Storno</button>
-                    <button type="button" class="btn btn-lg btn-primary js-auth-only d-none">Verkauf</button>
-                    <button type="button" class="btn btn-lg btn-outline-primary js-auth-only d-none">Gutschein</button>
-                    <button type="button" class="btn btn-lg btn-outline-success js-auth-only d-none">Freigetraenk</button>
+                    <button type="button" class="btn btn-lg btn-primary js-auth-only d-none" data-book-type="Verkauft" data-product-id="<?php echo htmlspecialchars((string)($item['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                      <i class="bi bi-cart-plus me-1" aria-hidden="true"></i>
+                      <span data-i18n="pos.sell">Verkauf</span>
+                    </button>
+                    <button type="button" class="btn btn-lg btn-outline-primary js-auth-only d-none" data-book-type="Gutschein" data-product-id="<?php echo htmlspecialchars((string)($item['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                      <i class="bi bi-ticket-perforated me-1" aria-hidden="true"></i>
+                      <span data-i18n="pos.voucher">Gutschein</span>
+                    </button>
+                    <button type="button" class="btn btn-lg btn-outline-success js-auth-only d-none" data-book-type="Freigetraenk" data-product-id="<?php echo htmlspecialchars((string)($item['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                      <i class="bi bi-gift me-1" aria-hidden="true"></i>
+                      <span data-i18n="pos.free">Freigetraenk</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -118,9 +130,18 @@ $modals = <<<HTML
         <div id="accessStatus" class="text-secondary small mt-2" role="status" aria-live="polite" data-i18n="index.modal.status.none">Kein Token gespeichert</div>
       </div>
       <div class="modal-footer">
-        <button id="accessClear" class="btn btn-outline-secondary" type="button" data-i18n="common.delete">Loeschen</button>
-        <button id="accessSave" class="btn btn-primary" type="button" data-i18n="common.save">Speichern</button>
-        <button id="accessClose" class="btn btn-link" type="button" data-bs-dismiss="modal" data-i18n="common.close">Schliessen</button>
+        <button id="accessClear" class="btn btn-outline-secondary" type="button">
+          <i class="bi bi-trash me-1" aria-hidden="true"></i>
+          <span data-i18n="common.delete">Loeschen</span>
+        </button>
+        <button id="accessSave" class="btn btn-primary" type="button">
+          <i class="bi bi-check2 me-1" aria-hidden="true"></i>
+          <span data-i18n="common.save">Speichern</span>
+        </button>
+        <button id="accessClose" class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">
+          <i class="bi bi-x-lg me-1" aria-hidden="true"></i>
+          <span data-i18n="common.close">Schliessen</span>
+        </button>
       </div>
     </div>
   </div>
@@ -181,7 +202,7 @@ JS
 JS
 ];
 
-render_layout([
+$layoutManager->render([
     'title' => 'Kek - Checkout Tablet',
     'description' => 'Tablet Modus fuer den Checkout.',
     'header' => $header,
