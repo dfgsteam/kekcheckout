@@ -1,0 +1,152 @@
+<section class="card shadow-sm border-0 mb-4">
+  <div class="card-body">
+    <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between justify-content-lg-end gap-3 mb-3">
+      <h2 class="h5 mb-0 me-lg-auto">Kategorien</h2>
+      <button type="button" class="btn btn-lg btn-outline-danger js-auth-only d-none w-100 w-sm-auto" id="stornoButton">
+        <i class="bi bi-arrow-counterclockwise me-2" aria-hidden="true"></i>
+        <span data-i18n="pos.storno.button">Storno letzte Buchung</span>
+      </button>
+    </div>
+    <ul class="nav nav-tabs flex-nowrap overflow-x-auto pb-1" role="tablist" style="-webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none;">
+      <style>
+        .nav-tabs::-webkit-scrollbar { display: none; }
+        @media (min-width: 576px) {
+          .w-sm-auto { width: auto !important; }
+        }
+      </style>
+      {% for index, category in categories %}
+        {% set is_active = loop.first %}
+        {% set tab_id = 'tab-' ~ category.id %}
+        {% set pane_id = 'pane-' ~ category.id %}
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link{{ is_active ? ' active' : '' }}"
+            id="{{ tab_id }}"
+            data-bs-toggle="tab"
+            data-bs-target="#{{ pane_id }}"
+            type="button"
+            role="tab"
+            aria-controls="{{ pane_id }}"
+            aria-selected="{{ is_active ? 'true' : 'false' }}"
+            {% if category.name_i18n is defined or category.label_i18n is defined %}
+              data-i18n="{{ category.name_i18n|default(category.label_i18n) }}"
+            {% endif %}
+          >{{ category.name|default(category.label|default('')) }}</button>
+        </li>
+      {% endfor %}
+    </ul>
+    <div class="tab-content pt-3">
+      {% for index, category in categories %}
+        {% set is_active = loop.first %}
+        {% set tab_id = 'tab-' ~ category.id %}
+        {% set pane_id = 'pane-' ~ category.id %}
+        <div class="tab-pane fade{{ is_active ? ' show active' : '' }}" id="{{ pane_id }}" role="tabpanel" aria-labelledby="{{ tab_id }}">
+          {% if category.id == 'all' %}
+            <div class="mb-4">
+              <div class="input-group input-group-lg shadow-sm">
+                <span class="input-group-text bg-white border-end-0 text-secondary">
+                  <i class="bi bi-search"></i>
+                </span>
+                <input
+                  type="text"
+                  id="posSearch"
+                  class="form-control border-start-0 ps-0"
+                  placeholder="Produkte suchen..."
+                  data-i18n-placeholder="common.search"
+                  autocomplete="off"
+                >
+              </div>
+            </div>
+          {% endif %}
+          <div class="d-flex flex-column gap-3 js-pos-items">
+            {% for item in category.items %}
+                {% set ingredients_text = item.ingredients is iterable ? item.ingredients|join(', ') : item.ingredients|default('') %}
+                {% set tags_text = item.tags is iterable ? item.tags|join(', ') : item.tags|default('') %}
+                {% set preparation_text = item.preparation|default('') %}
+              <div class="card border-0 shadow-sm js-searchable-item" data-search-term="{{ item.name|lower }} {{ tags_text|lower }}">
+                <div class="card-body d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+                  <div class="flex-grow-1">
+                    <div class="h5 mb-0">{{ item.name }}</div>
+                    {% if tags_text %}
+                      <div class="text-secondary small mt-1">
+                        {% for tag in item.tags %}
+                          <span class="badge text-bg-light border text-secondary fw-normal">{{ tag }}</span>
+                        {% endfor %}
+                      </div>
+                    {% endif %}
+                  </div>
+                  <div class="d-flex flex-wrap align-items-center justify-content-lg-end gap-2 ms-lg-auto">
+                    <span class="fw-semibold">€ {{ item.price }}</span>
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary btn-icon"
+                      data-item-info
+                      data-item-name="{{ item.name }}"
+                      data-item-category="{{ category.name }}"
+                      data-item-price="{{ item.price }}"
+                      data-item-ingredients="{{ ingredients_text }}"
+                      data-item-tags="{{ tags_text }}"
+                      data-item-preparation="{{ preparation_text }}"
+                      data-i18n-aria-label="pos.info"
+                      data-i18n-title="pos.info"
+                    >
+                      <i class="bi bi-info-circle" aria-hidden="true"></i>
+                      <span class="btn-icon-text" data-i18n="pos.info">Info</span>
+                    </button>
+                    <button type="button" class="btn btn-primary js-auth-only d-none" data-book-type="Verkauft" data-product-id="{{ item.id }}">
+                      <i class="bi bi-cart-plus me-1" aria-hidden="true"></i>
+                      <span data-i18n="pos.sell">Verkauf</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-primary js-auth-only d-none" data-book-type="Gutschein" data-product-id="{{ item.id }}">
+                      <i class="bi bi-ticket-perforated me-1" aria-hidden="true"></i>
+                      <span data-i18n="pos.voucher">Gutschein</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-success js-auth-only d-none" data-book-type="Gratis" data-product-id="{{ item.id }}">
+                      <i class="bi bi-gift me-1" aria-hidden="true"></i>
+                      <span data-i18n="pos.free">Gratis</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<div class="modal fade" id="itemInfoModal" tabindex="-1" aria-labelledby="itemInfoName" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold" id="itemInfoName">-</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schliessen"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-md-4">
+            <div class="text-secondary small">Kategorie</div>
+            <div class="fw-semibold" id="itemInfoCategory">-</div>
+          </div>
+          <div class="col-12 col-md-4">
+            <div class="text-secondary small">Preis</div>
+            <div class="fw-semibold" id="itemInfoPrice">-</div>
+          </div>
+          <div class="col-12 col-md-4">
+            <div class="text-secondary small">Tags</div>
+            <div id="itemInfoTags" class="d-flex flex-wrap gap-2"></div>
+          </div>
+        </div>
+        <div class="mb-3">
+          <div class="text-secondary small">Zutaten</div>
+          <ul id="itemInfoIngredients" class="mb-0"></ul>
+        </div>
+        <div>
+          <div class="text-secondary small">Zubereitung</div>
+          <div id="itemInfoPreparation">-</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

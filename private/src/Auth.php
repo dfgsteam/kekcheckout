@@ -196,6 +196,26 @@ class Auth
         return $requested_with === 'fetch';
     }
 
+    public function validateToken(string $candidate, array $accessTokens, string $adminToken): bool
+    {
+        if ($candidate === '') {
+            return false;
+        }
+        foreach ($accessTokens as $entry) {
+            if (!is_array($entry) || empty($entry['active'])) {
+                continue;
+            }
+            $token = (string)($entry['token'] ?? '');
+            if ($token !== '' && hash_equals($token, $candidate)) {
+                return true;
+            }
+        }
+        if ($adminToken !== '' && hash_equals($adminToken, $candidate)) {
+            return true;
+        }
+        return false;
+    }
+
     public function authorizeAnyTokenRequest(array $accessTokens, string $adminToken): array
     {
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {

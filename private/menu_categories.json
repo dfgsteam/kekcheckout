@@ -1,1 +1,32 @@
-[{"id":"softdrinks","name":"Softdrinks","active":true},{"id":"cocktails","name":"Cocktails","active":true},{"id":"harter-alk","name":"Harter Alk","active":true},{"id":"snacks","name":"Snacks","active":true},{"id":"test","name":"test","active":true}]
+[
+    {
+        "id": "softdrinks",
+        "name": "Softdrinks",
+        "active": true
+    },
+    {
+        "id": "v-cocktails",
+        "name": "V. Cocktails",
+        "active": true
+    },
+    {
+        "id": "cocktails",
+        "name": "Cocktails",
+        "active": true
+    },
+    {
+        "id": "longdrink",
+        "name": "Longdrink",
+        "active": true
+    },
+    {
+        "id": "shots",
+        "name": "Shots",
+        "active": true
+    },
+    {
+        "id": "snacks",
+        "name": "Snacks",
+        "active": true
+    }
+]

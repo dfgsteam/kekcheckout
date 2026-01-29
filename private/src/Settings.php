@@ -25,6 +25,7 @@ class Settings
             'capacity_default' => 150,
             'storno_max_minutes' => 3,
             'storno_max_back' => 5,
+            'tablet_type_reset' => 30,
         ];
 
         if (!is_file($this->path)) {

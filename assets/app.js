@@ -18,24 +18,13 @@ const eventNameEl = document.getElementById("eventName");
 const incBtn = document.getElementById("inc");
 const decBtn = document.getElementById("dec");
 const thresholdValueEl = document.getElementById("thresholdValue");
-const accessOpen = document.getElementById("accessOpen");
-const accessLogout = document.getElementById("accessLogout");
-const accessDialog = document.getElementById("accessDialog");
-const accessInput = document.getElementById("accessToken");
-const accessSave = document.getElementById("accessSave");
-const accessClear = document.getElementById("accessClear");
-const accessClose = document.getElementById("accessClose");
-const accessStatus = document.getElementById("accessStatus");
 const downloadCurrent = document.getElementById("downloadCurrent");
-let accessModal = null;
 let requestCounter = 0;
 let lastAppliedRequest = 0;
 let lastMutationRequest = 0;
 let statusInFlight = false;
 let mutationInFlight = false;
 let downloadCheckCounter = 0;
-let accessValidationTimer = null;
-let accessValidationCounter = 0;
 const REQUEST_TIMEOUT_MS = 8000;
 const windowHours = Number(settings.window_hours) > 0 ? Number(settings.window_hours) : 3;
 const tickMinutes = Number(settings.tick_minutes) > 0 ? Number(settings.tick_minutes) : 15;
@@ -43,8 +32,6 @@ const WINDOW_SECONDS = windowHours * 3600;
 const TICK_STEP_SECONDS = tickMinutes * 60;
 const MAX_TICKS = Math.max(3, Math.min(20, Math.floor(WINDOW_SECONDS / TICK_STEP_SECONDS) + 1));
 let axisBaseMs = null;
-const ACCESS_TOKEN_KEY = "kekcounter.accessToken";
-const ADMIN_TOKEN_KEY = "kekcounter.adminToken";
 
 if (thresholdValueEl) {
   thresholdValueEl.textContent = String(threshold);
@@ -297,168 +284,6 @@ function formatTime(seconds) {
   return `${hh}:${mm}`;
 }
 
-/** Read the stored access token from localStorage. */
-function getAccessToken() {
-  try {
-    return localStorage.getItem(ACCESS_TOKEN_KEY) || "";
-  } catch (error) {
-    return "";
-  }
-}
-
-/** Read the stored admin token from localStorage. */
-function getAdminToken() {
-  try {
-    return localStorage.getItem(ADMIN_TOKEN_KEY) || "";
-  } catch (error) {
-    return "";
-  }
-}
-
-/** Persist the admin token and refresh dependent UI. */
-function setAdminToken(token) {
-  try {
-    localStorage.setItem(ADMIN_TOKEN_KEY, token);
-  } catch (error) {
-    console.error(error);
-  }
-  refreshAccessStatus();
-  void refreshDownloadVisibility();
-}
-
-/** Clear the admin token and refresh dependent UI. */
-function clearAdminToken() {
-  try {
-    localStorage.removeItem(ADMIN_TOKEN_KEY);
-  } catch (error) {
-    console.error(error);
-  }
-  refreshAccessStatus();
-  void refreshDownloadVisibility();
-}
-
-/** Update the access status label text/state. */
-function setAccessStatus(message, isError = false) {
-  if (!accessStatus) {
-    return;
-  }
-  accessStatus.textContent = message;
-  accessStatus.classList.toggle("text-danger", isError);
-  accessStatus.classList.toggle("text-secondary", !isError);
-}
-
-/** Toggle access/login buttons based on token state. */
-function updateAccessButtons() {
-  const hasAccess = getAccessToken() !== "";
-  const hasAdmin = getAdminToken() !== "";
-  if (accessOpen) {
-    accessOpen.classList.toggle("d-none", hasAccess || hasAdmin);
-  }
-  if (accessLogout) {
-    accessLogout.classList.toggle("d-none", !(hasAccess || hasAdmin));
-  }
-}
-
-/** Show the access modal if available. */
-function openAccessDialog() {
-  if (!accessDialog) {
-    return false;
-  }
-  if (window.bootstrap?.Modal) {
-    accessModal = bootstrap.Modal.getOrCreateInstance(accessDialog);
-    accessModal.show();
-  } else {
-    return false;
-  }
-  refreshAccessStatus();
-  if (accessInput) {
-    accessInput.focus();
-  }
-  return true;
-}
-
-/** Hide the access modal if open. */
-function closeAccessDialog() {
-  if (!accessDialog) {
-    return;
-  }
-  if (accessModal) {
-    accessModal.hide();
-  }
-}
-
-/** Persist the access token and refresh dependent UI. */
-function setAccessToken(token) {
-  try {
-    localStorage.setItem(ACCESS_TOKEN_KEY, token);
-  } catch (error) {
-    console.error(error);
-  }
-  void maybeStoreAdminToken(token);
-  refreshAccessStatus();
-  if (accessInput) {
-    accessInput.value = "";
-  }
-}
-
-/** Clear the access token and refresh dependent UI. */
-function clearAccessToken() {
-  try {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-  } catch (error) {
-    console.error(error);
-  }
-  refreshAccessStatus();
-  if (accessInput) {
-    accessInput.value = "";
-  }
-}
-
-/** Recompute access status from stored tokens. */
-function refreshAccessStatus() {
-  const hasAccess = getAccessToken() !== "";
-  const hasAdmin = getAdminToken() !== "";
-  if (hasAccess) {
-    setAccessStatus(t("token.saved"));
-    updateAccessButtons();
-    void refreshDownloadVisibility();
-    return;
-  }
-  if (hasAdmin) {
-    setAccessStatus(t("token.adminSaved"));
-    updateAccessButtons();
-    void refreshDownloadVisibility();
-    return;
-  }
-  setAccessStatus(t("token.noneSaved"));
-  updateAccessButtons();
-  void refreshDownloadVisibility();
-}
-
-/** Debounced token validation while typing. */
-function scheduleAccessValidation() {
-  if (!accessInput) {
-    return;
-  }
-  const token = accessInput.value.trim();
-  if (!token) {
-    refreshAccessStatus();
-    return;
-  }
-  setAccessStatus(t("token.checking"));
-  const requestId = ++accessValidationCounter;
-  if (accessValidationTimer) {
-    clearTimeout(accessValidationTimer);
-  }
-  accessValidationTimer = setTimeout(async () => {
-    const ok = await verifyToken(token);
-    if (requestId !== accessValidationCounter) {
-      return;
-    }
-    setAccessStatus(ok ? t("token.valid") : t("token.invalid"), !ok);
-  }, 400);
-}
-
 /** Toggle visibility of the CSV download button. */
 function setDownloadVisible(visible) {
   if (!downloadCurrent) {
@@ -467,83 +292,52 @@ function setDownloadVisible(visible) {
   downloadCurrent.classList.toggle("d-none", !visible);
 }
 
-/** Verify a token against the backend. */
-async function verifyToken(token) {
-  try {
-    const response = await fetchWithTimeout("?action=verify", {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        "X-Requested-With": "fetch",
-        ...(token ? { "X-Access-Token": token } : {}),
-      },
-    }, REQUEST_TIMEOUT_MS);
-    return response.ok;
-  } catch (error) {
-    console.error(error);
-    return false;
-  }
-}
-
 /** Check token validity to show/hide download. */
 async function refreshDownloadVisibility() {
-  if (!downloadCurrent) {
+  if (!downloadCurrent || !window.kekAccess) {
     return;
   }
   const requestId = ++downloadCheckCounter;
-  const accessToken = getAccessToken();
-  const adminToken = getAdminToken();
+  const accessToken = window.kekAccess.getAccessToken();
+  const adminToken = window.kekAccess.getAdminToken();
+  
   if (!accessToken && !adminToken) {
     setDownloadVisible(false);
     return;
   }
-  setDownloadVisible(false);
-  if (accessToken) {
-    const ok = await verifyToken(accessToken);
-    if (requestId !== downloadCheckCounter) {
-      return;
-    }
-    if (ok) {
-      setDownloadVisible(true);
-      return;
-    }
+
+  // We check validity via a simple request
+  try {
+    const token = accessToken || adminToken;
+    const response = await fetchWithTimeout("index.php?action=validate_token", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    }, REQUEST_TIMEOUT_MS);
+    
+    if (requestId !== downloadCheckCounter) return;
+    setDownloadVisible(response.ok);
+  } catch (e) {
+    if (requestId !== downloadCheckCounter) return;
+    setDownloadVisible(false);
   }
-  if (adminToken) {
-    const ok = await verifyToken(adminToken);
-    if (requestId !== downloadCheckCounter) {
-      return;
-    }
-    setDownloadVisible(ok);
-    return;
-  }
-  setDownloadVisible(false);
 }
 
 /** Ensure a token is available or prompt the user. */
 function requestAccessToken() {
-  const existing = getAccessToken();
+  if (!window.kekAccess) return "";
+  const existing = window.kekAccess.getAccessToken();
   if (existing) {
     return existing;
   }
-  const adminToken = getAdminToken();
+  const adminToken = window.kekAccess.getAdminToken();
   if (adminToken) {
-    setAccessStatus(t("token.adminInUse"));
     return adminToken;
   }
-  setAccessStatus(t("token.requiredToChange"), true);
-  if (openAccessDialog()) {
-    return "";
-  }
-  const entered = window.prompt(t("token.promptAccess"));
-  if (!entered) {
-    return "";
-  }
-  const token = entered.trim();
-  if (!token) {
-    return "";
-  }
-  setAccessToken(token);
-  return token;
+  
+  window.kekAccess.open();
+  return "";
 }
 
 /** Download the current CSV if access is valid. */
@@ -558,27 +352,15 @@ async function downloadCurrentCsv() {
       cache: "no-store",
       headers: {
         "X-Requested-With": "fetch",
-        ...(accessToken ? { "X-Access-Token": accessToken } : {}),
+        "X-Access-Token": accessToken,
       },
     }, REQUEST_TIMEOUT_MS);
     if (!response.ok) {
       if (response.status === 403) {
-        try {
-          localStorage.removeItem(ACCESS_TOKEN_KEY);
-        } catch (error) {
-          console.error(error);
-        }
-        setAccessStatus(t("token.invalid"), true);
-        openAccessDialog();
-        void refreshDownloadVisibility();
+        window.kekAccess?.refresh();
         return;
       }
-      if (response.status === 503) {
-        setAccessStatus(t("token.missingServer"), true);
-        return;
-      }
-      setAccessStatus(t("download.failed"), true);
-      return;
+      throw new Error("Download failed");
     }
     const blob = await response.blob();
     const disposition = response.headers.get("Content-Disposition") || "";
@@ -592,29 +374,6 @@ async function downloadCurrentCsv() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-  } catch (error) {
-    console.error(error);
-    setAccessStatus(t("download.failed"), true);
-  }
-}
-
-/** Promote a token to admin if it has admin rights. */
-async function maybeStoreAdminToken(token) {
-  if (!token || getAdminToken() === token) {
-    return;
-  }
-  try {
-    const response = await fetchWithTimeout("admin.php?action=get_settings", {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        "X-Requested-With": "fetch",
-        "X-Admin-Token": token,
-      },
-    }, REQUEST_TIMEOUT_MS);
-    if (response.ok) {
-      setAdminToken(token);
-    }
   } catch (error) {
     console.error(error);
   }
@@ -770,19 +529,8 @@ async function fetchData(action, options = {}) {
     }, REQUEST_TIMEOUT_MS);
     if (!response.ok) {
       if (isMutation && response.status === 403) {
-        try {
-          localStorage.removeItem(ACCESS_TOKEN_KEY);
-        } catch (error) {
-          console.error(error);
-        }
-        setAccessStatus(t("token.invalid"), true);
-        openAccessDialog();
-        void refreshDownloadVisibility();
+        window.kekAccess?.refresh();
         throw new Error("Access token invalid");
-      }
-      if (isMutation && response.status === 503) {
-        setAccessStatus(t("token.missingServer"), true);
-        throw new Error("Access token not configured");
       }
       throw new Error("Request failed");
     }
@@ -849,83 +597,11 @@ if (!window.kekDisableCounter) {
   fetchData("status");
   setInterval(() => fetchData("status"), 15000);
 }
-refreshAccessStatus();
 
 document.addEventListener("themechange", applyChartTheme);
 document.addEventListener("accessibilitychange", applyChartTheme);
 
-if (accessOpen) {
-  accessOpen.addEventListener("click", () => {
-    if (openAccessDialog()) {
-      return;
-    }
-    const entered = window.prompt(t("token.promptAccess"));
-    if (!entered) {
-      return;
-    }
-    const token = entered.trim();
-    if (token) {
-      setAccessToken(token);
-    }
-  });
-}
-
-if (accessLogout) {
-  accessLogout.addEventListener("click", () => {
-    clearAccessToken();
-    clearAdminToken();
-    closeAccessDialog();
-  });
-}
-
-if (accessSave && accessInput) {
-  accessSave.addEventListener("click", async () => {
-    const token = accessInput.value.trim();
-    if (!token) {
-      setAccessStatus(t("token.missing"), true);
-      accessInput.focus();
-      return;
-    }
-    setAccessStatus(t("token.checking"));
-    const ok = await verifyToken(token);
-    if (!ok) {
-      setAccessStatus(t("token.invalid"), true);
-      return;
-    }
-    setAccessToken(token);
-    closeAccessDialog();
-  });
-}
-
-if (accessClear) {
-  accessClear.addEventListener("click", () => {
-    clearAccessToken();
-  });
-}
-
-if (accessClose) {
-  accessClose.addEventListener("click", () => {
-    closeAccessDialog();
-  });
-}
-
-if (accessInput) {
-  accessInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      accessSave?.click();
-    }
-  });
-}
-
-if (accessDialog && accessInput) {
-  accessDialog.addEventListener("shown.bs.modal", () => {
-    accessInput.focus();
-  });
-}
-
 document.addEventListener("languagechange", () => {
-  refreshAccessStatus();
   if (chart?.data?.datasets?.[0]) {
     chart.data.datasets[0].label = t("chart.visitors");
     chart.update();
@@ -941,6 +617,9 @@ if (downloadCurrent) {
     downloadCurrentCsv();
   });
 }
+
+window.addEventListener("storage", refreshDownloadVisibility);
+refreshDownloadVisibility();
 
 const isLocalhost =
   location.hostname === "localhost" ||

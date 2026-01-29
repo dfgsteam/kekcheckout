@@ -8,7 +8,7 @@ const adminClear = document.getElementById("adminClear");
 const adminStatus = document.getElementById("adminStatus");
 const adminAuthCard = document.getElementById("adminAuthCard");
 const adminContent = document.getElementById("adminContent");
-const adminLogout = document.getElementById("adminLogout");
+const adminLogout = document.getElementById("adminLogout") || document.getElementById("accessLogout");
 
 const restartBtn = document.getElementById("restartEvent");
 const restartStatus = document.getElementById("restartStatus");
@@ -46,6 +46,7 @@ const settingsTickMinutes = document.getElementById("settingsTickMinutes");
 const settingsCapacityDefault = document.getElementById("settingsCapacityDefault");
 const settingsStornoMinutes = document.getElementById("settingsStornoMinutes");
 const settingsStornoBack = document.getElementById("settingsStornoBack");
+const settingsTabletTypeReset = document.getElementById("settingsTabletTypeReset");
 const settingsSave = document.getElementById("settingsSave");
 const settingsStatus = document.getElementById("settingsStatus");
 const toastContainer = document.getElementById("toastContainer");
@@ -936,6 +937,9 @@ function fillSettings(settings) {
   if (settingsStornoBack) {
     settingsStornoBack.value = settings.storno_max_back ?? "";
   }
+  if (settingsTabletTypeReset) {
+    settingsTabletTypeReset.value = settings.tablet_type_reset ?? "";
+  }
 }
 
 /** Fill the event name input field. */
@@ -1032,6 +1036,7 @@ async function saveSettings(triggerButton) {
     capacity_default: readSetting(settingsCapacityDefault),
     storno_max_minutes: readSetting(settingsStornoMinutes),
     storno_max_back: readSetting(settingsStornoBack),
+    tablet_type_reset: readSetting(settingsTabletTypeReset),
   };
 
   if (
@@ -1042,7 +1047,8 @@ async function saveSettings(triggerButton) {
     payload.tick_minutes === null ||
     payload.capacity_default === null ||
     payload.storno_max_minutes === null ||
-    payload.storno_max_back === null
+    payload.storno_max_back === null ||
+    payload.tablet_type_reset === null
   ) {
     setStatus(settingsStatus, t("settings.fillAll"), true);
     return;

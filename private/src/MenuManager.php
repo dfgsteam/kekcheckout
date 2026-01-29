@@ -82,7 +82,8 @@ class MenuManager
             if (!is_string($item)) {
                 continue;
             }
-            $item = $this->slugifyId(trim($item));
+            $item = trim($item);
+            $item = preg_replace('/\s+/', ' ', $item) ?? $item;
             if ($item === '') {
                 continue;
             }
@@ -265,6 +266,44 @@ class MenuManager
             return ['ok' => false, 'error' => 'Not found'];
         }
         if (!$this->saveJsonList($this->itemsPath, $items)) {
+            return ['ok' => false, 'error' => 'Save failed'];
+        }
+        return ['ok' => true];
+    }
+
+    public function deleteCategory(string $id): array
+    {
+        if ($id === '') {
+            return ['ok' => false, 'error' => 'Missing ID'];
+        }
+        $categories = $this->loadJsonList($this->categoriesPath);
+        $newCategories = array_filter($categories, fn($c) => (string)($c['id'] ?? '') !== $id);
+        if (count($newCategories) === count($categories)) {
+            return ['ok' => false, 'error' => 'Not found'];
+        }
+        if (!$this->saveJsonList($this->categoriesPath, array_values($newCategories))) {
+            return ['ok' => false, 'error' => 'Save failed'];
+        }
+        // Also delete items in this category
+        $items = $this->loadJsonList($this->itemsPath);
+        $newItems = array_filter($items, fn($i) => (string)($i['category_id'] ?? '') !== $id);
+        if (count($newItems) !== count($items)) {
+            $this->saveJsonList($this->itemsPath, array_values($newItems));
+        }
+        return ['ok' => true];
+    }
+
+    public function deleteItem(string $id): array
+    {
+        if ($id === '') {
+            return ['ok' => false, 'error' => 'Missing ID'];
+        }
+        $items = $this->loadJsonList($this->itemsPath);
+        $newItems = array_filter($items, fn($i) => (string)($i['id'] ?? '') !== $id);
+        if (count($newItems) === count($items)) {
+            return ['ok' => false, 'error' => 'Not found'];
+        }
+        if (!$this->saveJsonList($this->itemsPath, array_values($newItems))) {
             return ['ok' => false, 'error' => 'Save failed'];
         }
         return ['ok' => true];

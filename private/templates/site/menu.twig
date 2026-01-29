@@ -1,0 +1,197 @@
+<section id="adminAuthCard" class="card shadow-sm border-0 mb-3">
+  <div class="card-body">
+    <h2 class="h5 mb-2" data-i18n="admin.auth.title">Admin-Token</h2>
+    <p class="text-secondary small mb-3" data-i18n="admin.auth.note">Token wird nur lokal im Browser gespeichert.</p>
+    <input
+      id="adminToken"
+      class="form-control"
+      type="password"
+      data-i18n-placeholder="admin.auth.placeholder"
+      placeholder="Admin-Token"
+      autocomplete="off"
+      inputmode="text"
+    >
+    <div class="d-flex flex-wrap gap-2 mt-3">
+      <button id="adminSave" class="btn btn-primary btn-sm" type="button">
+        <i class="bi bi-floppy me-1" aria-hidden="true"></i><span data-i18n="common.save">Speichern</span>
+      </button>
+      <button id="adminClear" class="btn btn-outline-danger btn-sm" type="button">
+        <i class="bi bi-x-circle me-1" aria-hidden="true"></i><span data-i18n="common.forget">Vergessen</span>
+      </button>
+    </div>
+    <div id="adminStatus" class="text-secondary small mt-2" role="status" aria-live="polite" data-i18n="admin.auth.status.none">Kein Token gespeichert</div>
+  </div>
+</section>
+
+<div id="adminContent" class="row g-3 d-none">
+  <section class="col-12 col-lg-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5 mb-2">Kategorien verwalten</h2>
+        <p class="text-secondary small mb-3">Bereiche fuer das Sortiment anlegen und aktivieren.</p>
+
+        <div class="row g-3">
+          <div class="col-12 col-lg-6">
+            <h3 class="h6 mb-2">Neue Kategorie</h3>
+            <label class="form-label small text-secondary" for="categoryName">Name</label>
+            <input id="categoryName" class="form-control" type="text" placeholder="z.B. Kaffee" autocomplete="off" inputmode="text">
+            <div class="form-check mt-2">
+              <input id="categoryActive" class="form-check-input" type="checkbox" checked>
+              <label class="form-check-label" for="categoryActive">Aktiv</label>
+            </div>
+            <div class="d-flex flex-wrap gap-2 mt-3">
+              <button id="categoryAdd" class="btn btn-primary btn-sm" type="button">Kategorie anlegen</button>
+            </div>
+            <div id="categoryStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="col-12 col-lg-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5 mb-2">Artikel anlegen</h2>
+        <p class="text-secondary small mb-3">Artikel mit Preis, Zutaten und Status pflegen.</p>
+        <h3 class="h6 mb-2">Neuer Artikel</h3>
+        <label class="form-label small text-secondary" for="itemCategory">Kategorie</label>
+        <select id="itemCategory" class="form-select">
+          {% for category in menu_categories %}
+            {% set cat_id = category.id|default('') %}
+            {% if cat_id != '' %}
+              <option value="{{ cat_id }}">
+                {{ category.name|default('Kategorie') }}
+              </option>
+            {% endif %}
+          {% endfor %}
+        </select>
+        <label class="form-label small text-secondary mt-2" for="itemName">Name</label>
+        <input id="itemName" class="form-control" type="text" placeholder="z.B. Espresso" autocomplete="off" inputmode="text">
+        <label class="form-label small text-secondary mt-2" for="itemPrice">Preis</label>
+        <input id="itemPrice" class="form-control" type="text" placeholder="2.50" autocomplete="off" inputmode="decimal">
+        <label class="form-label small text-secondary mt-2" for="itemIngredients">Zutaten</label>
+        <input id="itemIngredients" class="form-control" type="text" placeholder="z.B. Limette, Minze, Zucker" autocomplete="off" inputmode="text">
+        <label class="form-label small text-secondary mt-2" for="itemTags">Tags</label>
+        <input id="itemTags" class="form-control" type="text" placeholder="z.B. gin, wodka" autocomplete="off" inputmode="text">
+        <label class="form-label small text-secondary mt-2" for="itemPreparation">Zubereitung</label>
+        <textarea id="itemPreparation" class="form-control" rows="2" placeholder="Kurzbeschreibung der Zubereitung"></textarea>
+        <div class="form-check mt-2">
+          <input id="itemActive" class="form-check-input" type="checkbox" checked>
+          <label class="form-check-label" for="itemActive">Aktiv</label>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          <button id="itemAdd" class="btn btn-primary btn-sm" type="button">Artikel anlegen</button>
+        </div>
+        <div id="itemStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+  <section class="col-12">
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <h2 class="h5 mb-2">Aktuelles Sortiment</h2>
+        <p class="text-secondary small mb-3">Kategorien bearbeiten und Artikel pro Kategorie ausklappen.</p>
+        <div id="menuStatus" class="text-secondary small mb-2" role="status" aria-live="polite"></div>
+        <div id="menuList" class="d-flex flex-column gap-3">
+          {% if not menu_categories %}
+            <div class="text-secondary small">Noch keine Kategorien vorhanden.</div>
+          {% endif %}
+          {% for category in menu_categories %}
+            {% set cat_id = category.id|default('') %}
+            {% set cat_name = category.name|default('') %}
+            {% set cat_active = category.active|default(false) %}
+            {% set category_items = items_by_category[cat_id]|default([]) %}
+            <div class="card border-0 shadow-sm" data-category-id="{{ cat_id }}">
+              <div class="card-body">
+                <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2 mb-3">
+                  <div class="flex-grow-1">
+                    <label class="form-label small text-secondary">Kategorie</label>
+                    <input class="form-control form-control-sm js-category-name" value="{{ cat_name }}">
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="form-check">
+                      <input class="form-check-input js-category-active" type="checkbox" {{ cat_active ? 'checked' : '' }}>
+                      <label class="form-check-label">Aktiv</label>
+                    </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-action="save-category">Speichern</button>
+                  </div>
+                  <span class="badge {{ cat_active ? 'text-bg-success' : 'text-bg-secondary' }} align-self-start">
+                    {{ cat_active ? 'Aktiv' : 'Inaktiv' }}
+                  </span>
+                  <span class="badge text-bg-light text-secondary align-self-start">
+                    {{ category_items|length }} Artikel
+                  </span>
+                </div>
+                {% if not category_items %}
+                  <div class="text-secondary small">Keine Artikel vorhanden.</div>
+                {% else %}
+                  <details class="mb-0">
+                    <summary class="text-secondary small">Artikel anzeigen</summary>
+                    <div class="d-flex flex-column gap-2 mt-2">
+                      {% for item in category_items %}
+                        {% set item_id = item.id|default('') %}
+                        {% set item_name = item.name|default('') %}
+                        {% set item_price = item.price|default('0.00') %}
+                        {% set item_ingredients = item.ingredients|default([]) %}
+                        {% set item_tags = item.tags|default([]) %}
+                        {% set item_preparation = item.preparation|default('') %}
+                        {% set item_ingredients_label = item_ingredients is iterable ? item_ingredients|join(', ') : '' %}
+                        {% set item_tags_label = item_tags is iterable ? item_tags|join(', ') : '' %}
+                        {% set item_active = item.active|default(false) %}
+                        <div class="border rounded px-3 py-2 bg-light" data-item-id="{{ item_id }}">
+                          <div class="row g-2 align-items-center">
+                            <div class="col-12 col-md-4">
+                              <label class="form-label small text-secondary">Artikel</label>
+                              <input class="form-control form-control-sm js-item-name" value="{{ item_name }}">
+                            </div>
+                            <div class="col-12 col-md-2">
+                              <label class="form-label small text-secondary">Preis</label>
+                              <input class="form-control form-control-sm js-item-price" value="{{ item_price }}">
+                            </div>
+                            <div class="col-12 col-md-6">
+                              <label class="form-label small text-secondary">Zutaten</label>
+                              <input class="form-control form-control-sm js-item-ingredients" value="{{ item_ingredients_label }}">
+                            </div>
+                            <div class="col-12 col-md-4">
+                              <label class="form-label small text-secondary">Tags</label>
+                              <input class="form-control form-control-sm js-item-tags" value="{{ item_tags_label }}">
+                            </div>
+                            <div class="col-12 col-md-8">
+                              <label class="form-label small text-secondary">Zubereitung</label>
+                              <input class="form-control form-control-sm js-item-preparation" value="{{ item_preparation }}">
+                            </div>
+                            <div class="col-12 col-md-4 d-flex flex-wrap align-items-center gap-2">
+                              <div class="form-check">
+                                <input class="form-check-input js-item-active" type="checkbox" {{ item_active ? 'checked' : '' }}>
+                                <label class="form-check-label">Aktiv</label>
+                              </div>
+                              <button type="button" class="btn btn-outline-primary btn-sm" data-action="save-item">Speichern</button>
+                            </div>
+                          </div>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </details>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="modal fade" id="menuErrorModal" tabindex="-1" aria-labelledby="menuErrorTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5" id="menuErrorTitle">Fehler</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schliessen"></button>
+      </div>
+      <div class="modal-body">
+        <p id="menuErrorMessage" class="mb-0">Ein Fehler ist aufgetreten.</p>
+      </div>
+    </div>
+  </div>
+</div>

@@ -59,6 +59,18 @@ function setButtonDisabled(button, disabled) {
   button.setAttribute("aria-busy", disabled ? "true" : "false");
 }
 
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
 async function menuRequest(action, payload) {
   const token = getAdminToken();
   if (!token) {
@@ -159,13 +171,16 @@ function renderMenu(menu) {
     activeLabel.textContent = "Aktiv";
     activeWrap.appendChild(activeInput);
     activeWrap.appendChild(activeLabel);
-    const saveBtn = document.createElement("button");
-    saveBtn.type = "button";
-    saveBtn.className = "btn btn-outline-primary btn-sm";
-    saveBtn.dataset.action = "save-category";
-    saveBtn.textContent = "Speichern";
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn-outline-danger btn-sm";
+    deleteBtn.dataset.action = "delete-category";
+    deleteBtn.title = "Kategorie loeschen";
+    const deleteIcon = document.createElement("i");
+    deleteIcon.className = "bi bi-trash";
+    deleteBtn.appendChild(deleteIcon);
     actions.appendChild(activeWrap);
-    actions.appendChild(saveBtn);
+    actions.appendChild(deleteBtn);
     header.appendChild(titleWrap);
     header.appendChild(actions);
     const badge = document.createElement("span");
@@ -260,16 +275,20 @@ function renderMenu(menu) {
         itemActiveLabel.textContent = "Aktiv";
         itemActiveWrap.appendChild(itemActive);
         itemActiveWrap.appendChild(itemActiveLabel);
-        const itemSave = document.createElement("button");
-        itemSave.type = "button";
-        itemSave.className = "btn btn-outline-primary btn-sm";
-        itemSave.dataset.action = "save-item";
-        itemSave.textContent = "Speichern";
+        const itemDelete = document.createElement("button");
+        itemDelete.type = "button";
+        itemDelete.className = "btn btn-outline-danger btn-sm";
+        itemDelete.dataset.action = "delete-item";
+        itemDelete.title = "Artikel loeschen";
+        const itemDeleteIcon = document.createElement("i");
+        itemDeleteIcon.className = "bi bi-trash";
+        itemDelete.appendChild(itemDeleteIcon);
         colActions.appendChild(itemActiveWrap);
-        colActions.appendChild(itemSave);
+        colActions.appendChild(itemDelete);
         const itemBadge = document.createElement("span");
-        itemBadge.className = `badge js-item-badge ${item.active ? "text-bg-success" : "text-bg-secondary"}`;
-        itemBadge.textContent = item.active ? "Aktiv" : "Inaktiv";
+        const isActuallyActive = item.active && category.active;
+        itemBadge.className = `badge js-item-badge ${isActuallyActive ? "text-bg-success" : "text-bg-secondary"}`;
+        itemBadge.textContent = isActuallyActive ? "Aktiv" : "Inaktiv";
         colActions.appendChild(itemBadge);
 
         rowGrid.appendChild(colName);
@@ -331,6 +350,104 @@ async function loadMenu() {
     setStatus(menuStatus, error?.message || "Menue konnte nicht geladen werden.", true);
   }
 }
+
+async function saveCategory(card) {
+  if (!card) return;
+  const nameInput = card.querySelector(".js-category-name");
+  const activeInput = card.querySelector(".js-category-active");
+  const badge = card.querySelector(".js-category-badge");
+  const id = card.dataset.categoryId || "";
+  const name = nameInput ? nameInput.value.trim() : "";
+  const active = activeInput ? activeInput.checked : false;
+  if (!id || !name) {
+    return;
+  }
+  try {
+    const response = await menuRequest("update_category", { id, name, active });
+    setStatus(menuStatus, "Kategorie gespeichert.");
+    updateBadge(badge, active);
+    if (response?.menu) {
+      // We don't necessarily want to re-render everything on every auto-save to avoid losing focus
+      // But we might need to update other parts of the UI
+      // For now, let's just update the badges if needed
+      if (!active) {
+        // If category becomes inactive, all items should show as inactive
+        const itemBadges = card.querySelectorAll(".js-item-badge");
+        itemBadges.forEach(b => {
+          b.classList.remove("text-bg-success");
+          b.classList.add("text-bg-secondary");
+          b.textContent = "Inaktiv";
+        });
+      } else {
+        // If category becomes active, item status depends on their own active state
+        // Re-rendering might be easiest here, but focus loss is an issue.
+        // Let's just update the item badges based on their individual checkboxes
+        const itemRows = card.querySelectorAll("[data-item-id]");
+        itemRows.forEach(row => {
+          const itemActive = row.querySelector(".js-item-active")?.checked;
+          const itemBadge = row.querySelector(".js-item-badge");
+          if (itemBadge) {
+            const actuallyActive = active && itemActive;
+            itemBadge.classList.toggle("text-bg-success", actuallyActive);
+            itemBadge.classList.toggle("text-bg-secondary", !actuallyActive);
+            itemBadge.textContent = actuallyActive ? "Aktiv" : "Inaktiv";
+          }
+        });
+      }
+      populateCategorySelect(response.menu);
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+const debouncedSaveCategory = debounce(saveCategory, 500);
+
+async function saveItem(row) {
+  if (!row) return;
+  const card = row.closest("[data-category-id]");
+  const categoryActive = card?.querySelector(".js-category-active")?.checked ?? true;
+
+  const nameInput = row.querySelector(".js-item-name");
+  const priceInput = row.querySelector(".js-item-price");
+  const ingredientsInput = row.querySelector(".js-item-ingredients");
+  const tagsInput = row.querySelector(".js-item-tags");
+  const preparationInput = row.querySelector(".js-item-preparation");
+  const activeInput = row.querySelector(".js-item-active");
+  const badge = row.querySelector(".js-item-badge");
+  const id = row.dataset.itemId || "";
+  const name = nameInput ? nameInput.value.trim() : "";
+  const price = priceInput ? priceInput.value.trim() : "";
+  const ingredients = ingredientsInput ? ingredientsInput.value.trim() : "";
+  const tags = tagsInput ? tagsInput.value.trim() : "";
+  const preparation = preparationInput ? preparationInput.value.trim() : "";
+  const active = activeInput ? activeInput.checked : false;
+  if (!id || !name) {
+    return;
+  }
+  try {
+    const response = await menuRequest("update_item", {
+      id,
+      name,
+      price,
+      ingredients,
+      tags,
+      preparation,
+      active,
+    });
+    setStatus(menuStatus, "Artikel gespeichert.");
+    if (badge) {
+      const actuallyActive = active && categoryActive;
+      badge.classList.toggle("text-bg-success", actuallyActive);
+      badge.classList.toggle("text-bg-secondary", !actuallyActive);
+      badge.textContent = actuallyActive ? "Aktiv" : "Inaktiv";
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+const debouncedSaveItem = debounce(saveItem, 500);
 
 async function addCategory() {
   if (!categoryName || !categoryActive || !categoryAdd) {
@@ -443,32 +560,47 @@ if (menuAdminContent) {
 }
 
 if (menuList) {
+  menuList.addEventListener("input", (event) => {
+    const target = event.target;
+    if (target.classList.contains("js-category-name")) {
+      debouncedSaveCategory(target.closest("[data-category-id]"));
+    } else if (
+      target.classList.contains("js-item-name") ||
+      target.classList.contains("js-item-price") ||
+      target.classList.contains("js-item-ingredients") ||
+      target.classList.contains("js-item-tags") ||
+      target.classList.contains("js-item-preparation")
+    ) {
+      debouncedSaveItem(target.closest("[data-item-id]"));
+    }
+  });
+
+  menuList.addEventListener("change", (event) => {
+    const target = event.target;
+    if (target.classList.contains("js-category-active")) {
+      saveCategory(target.closest("[data-category-id]"));
+    } else if (target.classList.contains("js-item-active")) {
+      saveItem(target.closest("[data-item-id]"));
+    }
+  });
+
   menuList.addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-action]");
     if (!button) {
       return;
     }
     const action = button.dataset.action;
-    if (action === "save-category") {
+    if (action === "delete-category") {
       const card = button.closest("[data-category-id]");
-      if (!card) {
-        return;
-      }
-      const nameInput = card.querySelector(".js-category-name");
-      const activeInput = card.querySelector(".js-category-active");
-      const badge = card.querySelector(".js-category-badge");
-      const id = card.dataset.categoryId || "";
-      const name = nameInput ? nameInput.value.trim() : "";
-      const active = activeInput ? activeInput.checked : false;
-      if (!id || !name) {
-        setStatus(menuStatus, "Bitte Kategorie-Namen angeben.", true);
+      const id = card?.dataset.categoryId || "";
+      if (!id) return;
+      if (!confirm("Kategorie und alle enthaltenen Artikel wirklich loeschen?")) {
         return;
       }
       setButtonDisabled(button, true);
       try {
-        const response = await menuRequest("update_category", { id, name, active });
-        setStatus(menuStatus, "Kategorie gespeichert.");
-        updateBadge(badge, active);
+        const response = await menuRequest("delete_category", { id });
+        setStatus(menuStatus, "Kategorie geloescht.");
         if (response?.menu) {
           renderMenu(response.menu);
           populateCategorySelect(response.menu);
@@ -476,49 +608,24 @@ if (menuList) {
           await loadMenu();
         }
       } catch (error) {
-        showErrorModal(error.message || "Speichern fehlgeschlagen.");
-        setStatus(menuStatus, error.message || "Speichern fehlgeschlagen.", true);
+        showErrorModal(error.message || "Loeschen fehlgeschlagen.");
+        setStatus(menuStatus, error.message || "Loeschen fehlgeschlagen.", true);
       } finally {
         setButtonDisabled(button, false);
       }
     }
 
-    if (action === "save-item") {
+    if (action === "delete-item") {
       const row = button.closest("[data-item-id]");
-      if (!row) {
-        return;
-      }
-      const nameInput = row.querySelector(".js-item-name");
-      const priceInput = row.querySelector(".js-item-price");
-      const ingredientsInput = row.querySelector(".js-item-ingredients");
-      const tagsInput = row.querySelector(".js-item-tags");
-      const preparationInput = row.querySelector(".js-item-preparation");
-      const activeInput = row.querySelector(".js-item-active");
-      const badge = row.querySelector(".js-item-badge");
-      const id = row.dataset.itemId || "";
-      const name = nameInput ? nameInput.value.trim() : "";
-      const price = priceInput ? priceInput.value.trim() : "";
-      const ingredients = ingredientsInput ? ingredientsInput.value.trim() : "";
-      const tags = tagsInput ? tagsInput.value.trim() : "";
-      const preparation = preparationInput ? preparationInput.value.trim() : "";
-      const active = activeInput ? activeInput.checked : false;
-      if (!id || !name) {
-        setStatus(menuStatus, "Bitte Artikel-Namen angeben.", true);
+      const id = row?.dataset.itemId || "";
+      if (!id) return;
+      if (!confirm("Artikel wirklich loeschen?")) {
         return;
       }
       setButtonDisabled(button, true);
       try {
-        const response = await menuRequest("update_item", {
-          id,
-          name,
-          price,
-          ingredients,
-          tags,
-          preparation,
-          active,
-        });
-        setStatus(menuStatus, "Artikel gespeichert.");
-        updateBadge(badge, active);
+        const response = await menuRequest("delete_item", { id });
+        setStatus(menuStatus, "Artikel geloescht.");
         if (response?.menu) {
           renderMenu(response.menu);
           populateCategorySelect(response.menu);
@@ -526,8 +633,8 @@ if (menuList) {
           await loadMenu();
         }
       } catch (error) {
-        showErrorModal(error.message || "Speichern fehlgeschlagen.");
-        setStatus(menuStatus, error.message || "Speichern fehlgeschlagen.", true);
+        showErrorModal(error.message || "Loeschen fehlgeschlagen.");
+        setStatus(menuStatus, error.message || "Loeschen fehlgeschlagen.", true);
       } finally {
         setButtonDisabled(button, false);
       }

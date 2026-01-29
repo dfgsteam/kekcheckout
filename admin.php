@@ -421,298 +421,40 @@ $layoutManager = new Layout();
 <?php
 require_once __DIR__ . '/private/layout.php';
 
-$header = <<<HTML
-<header class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-end gap-3 mb-4">
-  <div>
-    <div class="text-uppercase text-primary small fw-semibold mb-2">Kek - Checkout</div>
-    <h1 class="display-6 fw-semibold mb-2">Admin</h1>
-    <p class="text-secondary mb-0">Kasse konfigurieren und Auswertungen verwalten.</p>
-  </div>
-  <div class="icon-actions">
-    <a
-      class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
-      href="/"
-      data-i18n-aria-label="nav.back"
-      data-i18n-title="nav.back"
-    >
-      <i class="bi bi-arrow-left" aria-hidden="true"></i>
-      <span class="btn-icon-text" data-i18n="nav.back">Zurueck</span>
-    </a>
-    <button
-      id="adminLogout"
-      class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary d-none"
-      type="button"
-      data-i18n-aria-label="nav.logout"
-      data-i18n-title="nav.logout"
-    >
-      <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
-      <span class="btn-icon-text" data-i18n="nav.logout">Abmelden</span>
-    </button>
-    <a
-      class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
-      href="/menu.php"
-      data-i18n-aria-label="nav.menu"
-      data-i18n-title="nav.menu"
-    >
-      <i class="bi bi-book" aria-hidden="true"></i>
-      <span class="btn-icon-text" data-i18n="nav.menu">Menue</span>
-    </a>
-    <button
-      class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
-      type="button"
-      data-settings-open
-      data-i18n-aria-label="settings.button"
-      data-i18n-title="settings.button"
-    >
-      <i class="bi bi-sliders2" aria-hidden="true"></i>
-      <span class="btn-icon-text" data-i18n="settings.button">Einstellungen</span>
-    </button>
-  </div>
-</header>
-HTML;
-
-ob_start();
-?>
-<section id="adminAuthCard" class="card shadow-sm border-0 mb-3">
-  <div class="card-body">
-    <h2 class="h5 mb-2" data-i18n="admin.auth.title">Admin-Token</h2>
-    <p class="text-secondary small mb-3" data-i18n="admin.auth.note">Token wird nur lokal im Browser gespeichert.</p>
-    <input
-      id="adminToken"
-      class="form-control"
-      type="password"
-      data-i18n-placeholder="admin.auth.placeholder"
-      placeholder="Admin-Token"
-      autocomplete="off"
-      inputmode="text"
-    >
-    <div class="d-flex flex-wrap gap-2 mt-3">
-      <button id="adminSave" class="btn btn-primary btn-sm" type="button">
-        <i class="bi bi-floppy me-1" aria-hidden="true"></i><span data-i18n="common.save">Speichern</span>
-      </button>
-      <button id="adminClear" class="btn btn-outline-danger btn-sm" type="button">
-        <i class="bi bi-x-circle me-1" aria-hidden="true"></i><span data-i18n="common.forget">Vergessen</span>
-      </button>
-    </div>
-    <div id="adminStatus" class="text-secondary small mt-2" role="status" aria-live="polite" data-i18n="admin.auth.status.none">Kein Token gespeichert</div>
-  </div>
-</section>
-
-<div id="adminContent" class="row g-3 d-none">
-  <section class="col-12 col-lg-4">
-    <div class="card shadow-sm border-0 h-100">
-      <div class="card-body">
-        <h2 class="h5 mb-2" data-i18n="admin.event.title">Veranstaltung</h2>
-        <p class="text-secondary small mb-3" data-i18n="admin.event.note">Startet eine neue CSV und archiviert die alte.</p>
-        <div class="d-flex flex-wrap gap-2">
-          <button id="restartEvent" class="btn btn-outline-danger btn-sm" type="button">
-            <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i><span data-i18n="admin.event.restart">Neustarten</span>
-          </button>
-        </div>
-        <div id="restartStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
-        <hr class="my-3">
-        <label class="form-label small text-secondary" for="eventNameInput" data-i18n="admin.event.nameLabel">Veranstaltungsname</label>
-        <input
-          id="eventNameInput"
-          class="form-control"
-          type="text"
-          data-i18n-placeholder="admin.event.namePlaceholder"
-          placeholder="z.B. Sommerfest"
-          autocomplete="off"
-          inputmode="text"
-        >
-        <div class="d-flex flex-wrap gap-2 mt-3">
-          <button id="eventNameSave" class="btn btn-primary btn-sm" type="button">
-            <i class="bi bi-floppy me-1" aria-hidden="true"></i><span data-i18n="common.save">Speichern</span>
-          </button>
-        </div>
-        <div id="eventNameStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
-      </div>
-    </div>
-  </section>
-  <section class="col-12 col-lg-8">
-    <div class="card shadow-sm border-0 h-100">
-      <div class="card-body">
-        <h2 class="h5 mb-2" data-i18n="admin.settings.title">Einstellungen</h2>
-        <p class="text-secondary small mb-3" data-i18n="admin.settings.note">Zentrale Defaults fuer App und Analyse.</p>
-        <div class="row g-3">
-          <div class="col-12 col-md-6">
-            <label class="form-label small text-secondary" for="settingsThreshold" data-i18n="admin.settings.threshold">Kritisch-Grenze</label>
-            <input id="settingsThreshold" class="form-control" type="number" min="1" step="1">
-          </div>
-          <div class="col-12 col-md-6">
-            <label class="form-label small text-secondary" for="settingsMaxPoints" data-i18n="admin.settings.maxPoints">Max. Datenpunkte</label>
-            <input id="settingsMaxPoints" class="form-control" type="number" min="1" step="1">
-          </div>
-          <div class="col-12 col-md-6">
-            <label class="form-label small text-secondary" for="settingsChartMaxPoints" data-i18n="admin.settings.chartMaxPoints">Chart-Max. Punkte</label>
-            <input id="settingsChartMaxPoints" class="form-control" type="number" min="1" step="1">
-          </div>
-          <div class="col-12 col-md-6">
-            <label class="form-label small text-secondary" for="settingsWindowHours" data-i18n="admin.settings.windowHours">Zeitfenster (Stunden)</label>
-            <input id="settingsWindowHours" class="form-control" type="number" min="1" step="1">
-          </div>
-          <div class="col-12 col-md-6">
-            <label class="form-label small text-secondary" for="settingsTickMinutes" data-i18n="admin.settings.tickMinutes">Tick-Abstand (Min)</label>
-            <input id="settingsTickMinutes" class="form-control" type="number" min="1" step="1">
-          </div>
-          <div class="col-12 col-md-6">
-            <label class="form-label small text-secondary" for="settingsCapacityDefault" data-i18n="admin.settings.capacityDefault">Kapazitaet (Default)</label>
-            <input id="settingsCapacityDefault" class="form-control" type="number" min="1" step="1">
-          </div>
-          <div class="col-12 col-md-6">
-            <label class="form-label small text-secondary" for="settingsStornoMinutes" data-i18n="admin.settings.stornoMinutes">Storno Max Minuten</label>
-            <input id="settingsStornoMinutes" class="form-control" type="number" min="1" step="1">
-          </div>
-          <div class="col-12 col-md-6">
-            <label class="form-label small text-secondary" for="settingsStornoBack" data-i18n="admin.settings.stornoBack">Storno Max Rueckwaerts</label>
-            <input id="settingsStornoBack" class="form-control" type="number" min="1" step="1">
-          </div>
-        </div>
-        <div class="d-flex flex-wrap gap-2 mt-3">
-          <button id="settingsSave" class="btn btn-primary btn-sm" type="button">
-            <i class="bi bi-floppy me-1" aria-hidden="true"></i><span data-i18n="common.save">Speichern</span>
-          </button>
-        </div>
-        <div id="settingsStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
-      </div>
-    </div>
-  </section>
-
-  <div class="col-12 col-lg-4">
-    <div class="row">
-      <section class="col-12 mb-lg-3">
-        <div class="card shadow-sm border-0 h-100">
-          <div class="card-body">
-            <h2 class="h5 mb-2" data-i18n="admin.accessKeys.title">Access-Keys</h2>
-            <p class="text-secondary small mb-3" data-i18n="admin.accessKeys.note">Mehrere Kassen-Keys mit Namen anlegen.</p>
-            <label class="form-label small text-secondary" for="accessTokenNameNew" data-i18n="admin.accessKeys.nameLabel">Name</label>
-            <input
-              id="accessTokenNameNew"
-              class="form-control"
-              type="text"
-              data-i18n-placeholder="admin.accessKeys.namePlaceholder"
-              placeholder="z.B. Marvin"
-              autocomplete="off"
-              inputmode="text"
-            >
-            <label class="form-label small text-secondary mt-2" for="accessTokenNew" data-i18n="admin.accessKeys.keyLabel">Key</label>
-            <input
-              id="accessTokenNew"
-              class="form-control"
-              type="password"
-              data-i18n-placeholder="admin.accessKeys.keyPlaceholder"
-              placeholder="Neuer Access-Token"
-              autocomplete="off"
-              inputmode="text"
-            >
-            <div class="d-flex flex-wrap gap-2 mt-3">
-              <button id="accessTokenAdd" class="btn btn-primary btn-sm" type="button">
-                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i><span data-i18n="admin.accessKeys.add">Anlegen</span>
-              </button>
-            </div>
-            <div id="accessTokenStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
-            <h3 class="h6 mt-4 mb-2" data-i18n="admin.accessKeys.existing">Vorhandene Keys</h3>
-            <div id="accessTokenList" class="d-flex flex-column gap-2"></div>
-          </div>
-        </div>
-      </section>
-      <section class="col-12">
-        <div class="card shadow-sm border-0 h-100">
-          <div class="card-body">
-            <h2 class="h5 mb-2" data-i18n="admin.adminToken.title">Admin-Token</h2>
-            <p class="text-secondary small mb-3" data-i18n="admin.adminToken.note">Setzt den Admin-Token fuer Analyse & Admin.</p>
-            <input
-              id="adminTokenNew"
-              class="form-control"
-              type="password"
-              data-i18n-placeholder="admin.adminToken.placeholder"
-              placeholder="Neues Admin-Token"
-              autocomplete="off"
-              inputmode="text"
-            >
-            <div class="d-flex flex-wrap gap-2 mt-3">
-              <button id="adminTokenSave" class="btn btn-primary btn-sm" type="button">
-                <i class="bi bi-floppy me-1" aria-hidden="true"></i><span data-i18n="common.save">Speichern</span>
-              </button>
-            </div>
-            <div id="adminTokenStatus" class="text-secondary small mt-2" role="status" aria-live="polite"></div>
-          </div>
-        </div>
-      </section>
-    </div>
-  </div>
-
-  <section class="col-12 col-lg-8">
-    <div class="card shadow-sm border-0">
-      <div class="card-body">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-          <div>
-            <h2 class="h5 mb-1" data-i18n="admin.archive.title">Archiv</h2>
-            <p class="text-secondary small mb-0" data-i18n="admin.archive.note">CSV-Archive verwalten und umbenennen.</p>
-          </div>
-          <button id="adminArchiveRefresh" class="btn btn-outline-secondary btn-sm" type="button">
-            <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i><span data-i18n="common.listRefresh">Liste aktualisieren</span>
-          </button>
-        </div>
-        <div class="input-group input-group-sm archive-search mb-2">
-          <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
-          <input
-            id="adminArchiveSearch"
-            class="form-control"
-            type="search"
-            data-i18n-placeholder="archive.searchPlaceholder"
-            data-i18n-aria-label="archive.searchPlaceholder"
-            placeholder="Archiv suchen"
-            aria-label="Archiv suchen"
-            autocomplete="off"
-          >
-        </div>
-        <div id="adminArchiveStatus" class="text-secondary small mb-2" role="status" aria-live="polite" data-i18n="archive.noneLoaded">Keine Archive geladen</div>
-        <div class="table-responsive analysis-table">
-          <table class="table table-sm align-middle mb-0">
-            <thead>
-              <tr>
-                <th scope="col" data-i18n="analysis.archive.table.event">Veranstaltung</th>
-                <th scope="col" class="text-nowrap" data-i18n="analysis.archive.table.modified">Geaendert</th>
-                <th scope="col" class="text-end" data-i18n="analysis.archive.table.size">Groesse</th>
-                <th scope="col" class="text-end" data-i18n="analysis.archive.table.actions">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody id="adminArchiveList"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </section>
-</div>
-<?php
-$content = ob_get_clean();
-
-$footer = <<<HTML
-<footer class="mt-4 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2 small text-secondary">
-  <div class="d-flex flex-wrap gap-2">
-    <a class="link-secondary text-decoration-none" href="https://julius-hunold.de/datenschutz" target="_blank" rel="noopener" data-i18n="footer.privacy">Datenschutz</a>
-    <span class="text-secondary" aria-hidden="true">•</span>
-    <a class="link-secondary text-decoration-none" href="https://julius-hunold.de/impressum" target="_blank" rel="noopener" data-i18n="footer.imprint">Impressum</a>
-  </div>
-  <div>
-    <span data-i18n="footer.builtBy">Erstellt von</span>
-    <a class="link-secondary text-decoration-none" href="https://hunold24.de" target="_blank" rel="noopener">Julius Hunold</a>
-  </div>
-</footer>
+$header_actions_html = <<<HTML
+<a
+  class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
+  href="/"
+  data-i18n-aria-label="nav.back"
+  data-i18n-title="nav.back"
+>
+  <i class="bi bi-arrow-left" aria-hidden="true"></i>
+  <span class="btn-icon-text" data-i18n="nav.back">Zurueck</span>
+</a>
+<a
+  class="btn btn-link btn-sm btn-icon text-decoration-none text-secondary"
+  href="/menu.php"
+  data-i18n-aria-label="nav.menu"
+  data-i18n-title="nav.menu"
+>
+  <i class="bi bi-book" aria-hidden="true"></i>
+  <span class="btn-icon-text" data-i18n="nav.menu">Menue</span>
+</a>
 HTML;
 
 $csrf_token_val = $auth->getCsrfToken();
 
 $layoutManager->render([
+    'template' => 'site/admin.twig',
     'title' => 'Kek-Counter Admin',
     'manifest' => '',
-    'header' => $header,
-    'content' => $content,
-    'footer_extra' => $footer,
+    'title_h1' => 'Admin',
+    'header_class_extra' => 'align-items-lg-end',
+    'description_p' => 'Kasse konfigurieren und Auswertungen verwalten.',
+    'header_actions_html' => $header_actions_html,
     'header_extra' => '<meta name="csrf-token" content="' . $csrf_token_val . '"><meta name="robots" content="noindex, nofollow">',
     'scripts' => [
         'assets/admin.js',
     ],
 ]);
+exit;
