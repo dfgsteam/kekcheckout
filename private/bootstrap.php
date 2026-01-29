@@ -64,7 +64,9 @@ function log_event(string $path, string $action, int $status, array $extra = [])
 
     $dir = dirname($path);
     if (!is_dir($dir)) {
-        @mkdir($dir, 0770, true);
+        if (!@mkdir($dir, 0770, true) && !is_dir($dir)) {
+            return;
+        }
     }
 
     $fp = @fopen($path, 'c+');
@@ -93,6 +95,20 @@ function log_event(string $path, string $action, int $status, array $extra = [])
 }
 
 /**
+ * Send a JSON error response and stop execution.
+ */
+function send_json_error(int $code, string $message, string $log_path = '', string $action = ''): void
+{
+    if ($log_path !== '') {
+        log_event($log_path, $action !== '' ? $action : 'error', $code, ['error' => $message]);
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    http_response_code($code);
+    echo json_encode(['error' => $message]);
+    exit;
+}
+
+/**
  * Read the saved event name from disk.
  */
 function load_event_name(string $path): string
@@ -114,7 +130,9 @@ function load_event_name(string $path): string
 function ensure_archive_dir(string $dir): void
 {
     if (!is_dir($dir)) {
-        @mkdir($dir, 0770, true);
+        if (!@mkdir($dir, 0770, true) && !is_dir($dir)) {
+            return;
+        }
     }
 }
 
@@ -126,6 +144,17 @@ function read_json_body(): array
     $raw = (string)file_get_contents('php://input');
     $data = json_decode($raw, true);
     return is_array($data) ? $data : [];
+}
+
+/**
+ * Sanitize a string to be safe for display or storage.
+ */
+function sanitize_string(string $value, int $max_len = 255): string
+{
+    $value = trim($value);
+    $value = preg_replace('/\s+/', ' ', $value) ?? $value;
+    $value = htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    return mb_substr($value, 0, $max_len);
 }
 
 /**

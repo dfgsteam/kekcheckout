@@ -14,16 +14,6 @@ require_once __DIR__ . '/private/menu_lib.php';
 require_once __DIR__ . '/private/sales_lib.php';
 require_once __DIR__ . '/private/layout.php';
 
-/**
- * Send a JSON error response and stop execution.
- */
-function send_json_error(int $code, string $message): void
-{
-    header('Content-Type: application/json; charset=utf-8');
-    http_response_code($code);
-    echo json_encode(['error' => $message]);
-    exit;
-}
 
 /**
  * Resolve a user identity from token headers.
@@ -63,11 +53,17 @@ if ($action === 'book' || $action === 'storno') {
     require_any_token($access_tokens, $admin_token);
     $payload = read_json_body();
 
+    // CSRF check for state-changing actions
+    $csrf_token = $payload['csrf_token'] ?? ($_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
+    if (!verify_csrf_token($csrf_token)) {
+        send_json_error(403, 'Invalid CSRF token', $log_path, $action ?? '');
+    }
+
     if ($action === 'book') {
         $product_id = (string)($payload['productId'] ?? '');
         $type = (string)($payload['type'] ?? '');
         if ($product_id === '' || $type === '') {
-            send_json_error(400, 'Missing data');
+            send_json_error(400, 'Missing data', $log_path, $action ?? '');
         }
 
         $menu = menu_get_menu(__DIR__ . '/private/menu_categories.json', __DIR__ . '/private/menu_items.json');
@@ -83,7 +79,7 @@ if ($action === 'book' || $action === 'storno') {
             }
         }
         if ($product === null) {
-            send_json_error(404, 'Product not found');
+            send_json_error(404, 'Product not found', $log_path, $action ?? '');
         }
         foreach ($menu['categories'] as $cat) {
             if (!is_array($cat) || empty($cat['active'])) {
@@ -95,13 +91,13 @@ if ($action === 'book' || $action === 'storno') {
             }
         }
         if ($category === null) {
-            send_json_error(404, 'Category not found');
+            send_json_error(404, 'Category not found', $log_path, $action ?? '');
         }
 
         $user = resolve_user_identity($access_tokens, $admin_token);
         $booking = sales_build_booking($user, $product, $category, $type);
         if (!sales_append_booking_csv($booking_csv_path, $booking)) {
-            send_json_error(500, 'Save failed');
+            send_json_error(500, 'Save failed', $log_path, $action ?? '');
         }
         if ($log_path !== '') {
             log_event($log_path, 'book', 200, ['product' => $product_id, 'type' => $type]);
@@ -130,7 +126,7 @@ if ($action === 'book' || $action === 'storno') {
             $max_back
         );
         if (!$result['ok']) {
-            send_json_error(400, $result['error'] ?? 'Storno failed');
+            send_json_error(400, $result['error'] ?? 'Storno failed', $log_path, $action ?? '');
         }
         if ($log_path !== '') {
             log_event($log_path, 'storno', 200, ['user' => (string)$user['id']]);

@@ -82,27 +82,23 @@ function slugify_event_name(string $name): string
 }
 
 
-/**
- * Send a JSON error response and stop execution.
- */
-function send_json_error(int $code, string $message): void
-{
-    global $log_path, $action;
-    if ($log_path !== '') {
-        $log_action = $action ? 'admin:' . $action : 'admin';
-        log_event($log_path, $log_action, $code, ['error' => $message]);
-    }
-    header('Content-Type: application/json; charset=utf-8');
-    http_response_code($code);
-    echo json_encode(['error' => $message]);
-    exit;
-}
 
 
 $admin_token = load_token('KEKCOUNTER_ADMIN_TOKEN', $admin_token_path);
 $action = $_GET['action'] ?? null;
 if ($action !== null) {
     require_admin_token($admin_token);
+
+    // CSRF protection for state-changing actions
+    $is_get = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET';
+    $safe_actions = ['get_access_tokens', 'get_menu', 'get_logs', 'list_archives', 'download_archive'];
+    if (!$is_get && !in_array($action, $safe_actions, true)) {
+        $body = read_json_body();
+        $csrf_token = $body['csrf_token'] ?? ($_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
+        if (!verify_csrf_token($csrf_token)) {
+            send_json_error(403, 'Invalid CSRF token', $log_path, 'admin:' . $action);
+        }
+    }
 
     if ($action === 'restart') {
         header('Content-Type: application/json; charset=utf-8');
@@ -149,7 +145,7 @@ if ($action !== null) {
         $payload = read_json_body();
         $token = normalize_access_token_value((string)($payload['token'] ?? ($_POST['token'] ?? '')), 160);
         if ($token === '') {
-            send_json_error(400, 'Token missing');
+            send_json_error(400, 'Token missing', $log_path, 'admin:' . $action);
         }
         $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
         $updated = false;
@@ -171,7 +167,7 @@ if ($action !== null) {
             ];
         }
         if (!save_access_tokens($access_tokens_path, $tokens)) {
-            send_json_error(500, 'Save failed');
+            send_json_error(500, 'Save failed', $log_path, 'admin:' . $action);
         }
         log_event($log_path, 'admin:set_access_token', 200);
         echo json_encode(['ok' => true]);
@@ -192,7 +188,7 @@ if ($action !== null) {
         $token = normalize_access_token_value((string)($payload['token'] ?? ''), 160);
         $active = (bool)($payload['active'] ?? true);
         if ($name === '' || $token === '') {
-            send_json_error(400, 'Missing data');
+            send_json_error(400, 'Missing data', $log_path, "admin:" . ($action ?? "error"));
         }
         $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
         $base_id = access_slugify_id($name);
@@ -213,7 +209,7 @@ if ($action !== null) {
             'active' => $active,
         ];
         if (!save_access_tokens($access_tokens_path, $tokens)) {
-            send_json_error(500, 'Save failed');
+            send_json_error(500, 'Save failed', $log_path, "admin:" . ($action ?? "error"));
         }
         log_event($log_path, 'admin:add_access_token', 200, ['id' => $id, 'name' => $name]);
         echo json_encode(['ok' => true, 'accessTokens' => $tokens]);
@@ -228,7 +224,7 @@ if ($action !== null) {
         $token = normalize_access_token_value((string)($payload['token'] ?? ''), 160);
         $active = (bool)($payload['active'] ?? true);
         if ($id === '' || $name === '' || $token === '') {
-            send_json_error(400, 'Missing data');
+            send_json_error(400, 'Missing data', $log_path, "admin:" . ($action ?? "error"));
         }
         $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
         $found = false;
@@ -242,10 +238,10 @@ if ($action !== null) {
             }
         }
         if (!$found) {
-            send_json_error(404, 'Not found');
+            send_json_error(404, 'Not found', $log_path, "admin:" . ($action ?? "error"));
         }
         if (!save_access_tokens($access_tokens_path, $tokens)) {
-            send_json_error(500, 'Save failed');
+            send_json_error(500, 'Save failed', $log_path, "admin:" . ($action ?? "error"));
         }
         log_event($log_path, 'admin:update_access_token', 200, ['id' => $id, 'name' => $name]);
         echo json_encode(['ok' => true, 'accessTokens' => $tokens]);
@@ -257,7 +253,7 @@ if ($action !== null) {
         $payload = read_json_body();
         $id = (string)($payload['id'] ?? '');
         if ($id === '') {
-            send_json_error(400, 'Missing data');
+            send_json_error(400, 'Missing data', $log_path, "admin:" . ($action ?? "error"));
         }
         $tokens = load_access_tokens($access_tokens_path, $legacy_access_token_path);
         $next = [];
@@ -270,10 +266,10 @@ if ($action !== null) {
             $next[] = $entry;
         }
         if (!$found) {
-            send_json_error(404, 'Not found');
+            send_json_error(404, 'Not found', $log_path, "admin:" . ($action ?? "error"));
         }
         if (!save_access_tokens($access_tokens_path, $next)) {
-            send_json_error(500, 'Save failed');
+            send_json_error(500, 'Save failed', $log_path, "admin:" . ($action ?? "error"));
         }
         log_event($log_path, 'admin:delete_access_token', 200, ['id' => $id]);
         echo json_encode(['ok' => true, 'accessTokens' => $next]);
@@ -285,7 +281,7 @@ if ($action !== null) {
         $payload = read_json_body();
         $token = trim((string)($payload['token'] ?? ($_POST['token'] ?? '')));
         if ($token === '') {
-            send_json_error(400, 'Token missing');
+            send_json_error(400, 'Token missing', $log_path, "admin:" . ($action ?? "error"));
         }
         file_put_contents($admin_token_path, $token, LOCK_EX);
         log_event($log_path, 'admin:set_admin_token', 200);
@@ -315,7 +311,7 @@ if ($action !== null) {
         ensure_archive_dir($archive_dir);
         $path = resolve_archive_path($archive_dir, $name);
         if ($path === null || !is_file($path)) {
-            send_json_error(404, 'Not found');
+            send_json_error(404, 'Not found', $log_path, "admin:" . ($action ?? "error"));
         }
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . basename($path) . '"');
@@ -331,14 +327,14 @@ if ($action !== null) {
         ensure_archive_dir($archive_dir);
         $path = resolve_archive_path($archive_dir, $name);
         if ($path === null || !is_file($path)) {
-            send_json_error(404, 'Not found');
+            send_json_error(404, 'Not found', $log_path, "admin:" . ($action ?? "error"));
         }
         $new_name = normalize_archive_name($new_name_raw);
         if ($new_name === '') {
-            send_json_error(400, 'Name missing');
+            send_json_error(400, 'Name missing', $log_path, "admin:" . ($action ?? "error"));
         }
         if (!is_valid_archive_name($new_name)) {
-            send_json_error(400, 'Invalid name');
+            send_json_error(400, 'Invalid name', $log_path, "admin:" . ($action ?? "error"));
         }
         if ($new_name === $name) {
             echo json_encode(['ok' => true, 'name' => $new_name]);
@@ -346,14 +342,14 @@ if ($action !== null) {
         }
         $real_dir = realpath($archive_dir);
         if ($real_dir === false) {
-            send_json_error(500, 'Archive dir missing');
+            send_json_error(500, 'Archive dir missing', $log_path, "admin:" . ($action ?? "error"));
         }
         $new_path = $real_dir . DIRECTORY_SEPARATOR . $new_name;
         if (is_file($new_path)) {
-            send_json_error(409, 'Name exists');
+            send_json_error(409, 'Name exists', $log_path, "admin:" . ($action ?? "error"));
         }
         if (!@rename($path, $new_path)) {
-            send_json_error(500, 'Rename failed');
+            send_json_error(500, 'Rename failed', $log_path, "admin:" . ($action ?? "error"));
         }
         echo json_encode(['ok' => true, 'name' => $new_name]);
         exit;
@@ -366,10 +362,10 @@ if ($action !== null) {
         ensure_archive_dir($archive_dir);
         $path = resolve_archive_path($archive_dir, $name);
         if ($path === null || !is_file($path)) {
-            send_json_error(404, 'Not found');
+            send_json_error(404, 'Not found', $log_path, "admin:" . ($action ?? "error"));
         }
         if (!@unlink($path)) {
-            send_json_error(500, 'Delete failed');
+            send_json_error(500, 'Delete failed', $log_path, "admin:" . ($action ?? "error"));
         }
         echo json_encode(['ok' => true]);
         exit;
@@ -423,7 +419,7 @@ if ($action !== null) {
 
     if ($action === 'download_log') {
         if (!is_file($log_path)) {
-            send_json_error(404, 'Log not found');
+            send_json_error(404, 'Log not found', $log_path, "admin:" . ($action ?? "error"));
         }
         header('Content-Type: text/plain; charset=utf-8');
         header('Content-Disposition: attachment; filename="request.log"');
@@ -452,7 +448,7 @@ if ($action !== null) {
         $files = glob($archive_dir . '/*.csv') ?: [];
         usort($files, fn($a, $b) => filemtime($b) <=> filemtime($a));
         if (!$files) {
-            send_json_error(404, 'No archives');
+            send_json_error(404, 'No archives', $log_path, "admin:" . ($action ?? "error"));
         }
         $file = $files[0];
         log_event($log_path, 'admin:download_latest', 200, ['name' => basename($file)]);
@@ -462,7 +458,7 @@ if ($action !== null) {
         exit;
     }
 
-    send_json_error(400, 'Unknown action');
+    send_json_error(400, 'Unknown action', $log_path, 'admin');
     exit;
 }
 ?>

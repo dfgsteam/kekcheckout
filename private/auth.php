@@ -2,6 +2,34 @@
 declare(strict_types=1);
 
 /**
+ * Generate a CSRF token and store it in the session.
+ */
+function get_csrf_token(): string
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
+    }
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+/**
+ * Verify a CSRF token.
+ */
+function verify_csrf_token(?string $token): bool
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
+    }
+    if (empty($_SESSION['csrf_token']) || empty($token)) {
+        return false;
+    }
+    return hash_equals($_SESSION['csrf_token'], $token);
+}
+
+/**
  * Read a token from env or fallback file path.
  */
 function load_token(string $env_name, string $path): string
@@ -122,7 +150,9 @@ function save_access_tokens(string $path, array $tokens): bool
 {
     $dir = dirname($path);
     if (!is_dir($dir)) {
-        @mkdir($dir, 0770, true);
+        if (!@mkdir($dir, 0770, true) && !is_dir($dir)) {
+            return false;
+        }
     }
     $payload = json_encode($tokens, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
     if ($payload === false) {
