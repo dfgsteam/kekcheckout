@@ -439,6 +439,13 @@ canvas {
   flex-direction: column !important;
 }
 
+.tablet-body {
+  height: 100vh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
 .tablet-page .tab-content {
   flex: 1 1 auto !important;
   overflow: hidden !important;

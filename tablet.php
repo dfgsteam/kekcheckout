@@ -29,13 +29,26 @@ $layoutManager->render([
     'template' => 'site/tablet.twig',
     'title' => 'Kek - Checkout Tablet',
     'categories' => $categories,
-    'header_extra' => '<meta name="csrf-token" content="' . $csrf_token_val . '">',
+    'header_extra' => '<meta name="csrf-token" content="' . $csrf_token_val . '">'
+        . '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">',
     'inline_scripts' => [
         "(() => { window.kekDisableCounter = true; })();",
         "(() => { if (window.kekTheme && typeof window.kekTheme.setAccessibility === 'function') { window.kekTheme.setAccessibility(true); } })();",
-        "(() => { window.kekTabletSettings = " . json_encode(['typeResetSeconds' => $settings['tablet_type_reset'] ?? 30]) . "; })();"
+        "(() => { window.kekTabletSettings = " . json_encode(['typeResetSeconds' => $settings['tablet_type_reset'] ?? 30]) . "; })();",
+        "(() => {" .
+            "document.addEventListener('gesturestart', (e) => e.preventDefault());" .
+            "document.addEventListener('gesturechange', (e) => e.preventDefault());" .
+            "document.addEventListener('gestureend', (e) => e.preventDefault());" .
+            "let lastTouchEnd = 0;" .
+            "document.addEventListener('touchend', (e) => {" .
+                "const now = Date.now();" .
+                "if (now - lastTouchEnd < 300) { e.preventDefault(); }" .
+                "lastTouchEnd = now;" .
+            "}, { passive: false });" .
+        "})();"
     ],
     'scripts' => ['assets/app.js', 'assets/pos.js', 'assets/tablet_pos.js'],
     'main_class' => 'container-fluid py-2 px-2 tablet-page',
+    'body_class' => 'bg-light tablet-body',
 ]);
 exit;
